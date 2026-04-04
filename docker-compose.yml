@@ -1,0 +1,75 @@
+# LexIndia Docker Compose — development environment
+# Services: PostgreSQL (pgvector), Redis, FastAPI backend, Celery worker
+
+version: "3.9"
+
+services:
+  # PostgreSQL 15 with pgvector extension pre-installed
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: lexindia-postgres
+    environment:
+      POSTGRES_USER: lexuser
+      POSTGRES_PASSWORD: lexpass
+      POSTGRES_DB: lexindia
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lexuser -d lexindia"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis 7 — used for Celery broker and API response cache
+  redis:
+    image: redis:7-alpine
+    container_name: lexindia-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lexindia-backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    env_file:
+      - ./backend/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Celery worker — runs scraping pipeline tasks
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lexindia-celery
+    command: celery -A scraper.pipeline worker --loglevel=info
+    volumes:
+      - ./backend:/app
+    env_file:
+      - ./backend/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+    driver: local

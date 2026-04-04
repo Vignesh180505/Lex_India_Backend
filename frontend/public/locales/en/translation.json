@@ -1,0 +1,42 @@
+{
+  "appName": "LexIndia",
+  "tagline": "AI-Powered Indian Legal Access",
+  "searchPlaceholder": "Describe your legal problem in plain language...",
+  "searchButton": "Find Applicable Laws",
+  "loading": "Searching Indian legal database...",
+  "noResults": "No directly applicable laws found for your query.",
+  "errorGeneric": "Something went wrong. Please try again.",
+  "resultsTitle": "Applicable Laws",
+  "aiSummaryTitle": "AI Legal Summary",
+  "viewOriginal": "View original law text",
+  "hideOriginal": "Hide original law text",
+  "fileCase": "File a Case",
+  "relevance": "Relevance",
+  "severity": "Severity",
+  "severityHigh": "High",
+  "severityMedium": "Medium",
+  "severityLow": "Low",
+  "browseLaws": "Browse Laws",
+  "categories": {
+    "criminal": "Criminal",
+    "civil": "Civil",
+    "consumer": "Consumer"
+  },
+  "examplePrompts": {
+    "1": "My landlord is not returning my security deposit",
+    "2": "Someone threatened me online on social media",
+    "3": "I bought a defective product and the seller refuses a refund"
+  },
+  "language": "Language",
+  "languages": {
+    "en": "English",
+    "ta": "தமிழ்",
+    "hi": "हिन्दी"
+  },
+  "pagination": {
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page"
+  },
+  "legalPunishment": "Legal Punishment"
+}
