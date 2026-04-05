@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import SeverityBadge from "./SeverityBadge";
 import FilingLink from "./FilingLink";
+import FilingModal from "./FilingModal";
 import type { LawResult } from "@/lib/api";
 
 interface LawCardProps {
@@ -19,6 +20,7 @@ interface LawCardProps {
 export default function LawCard({ law, index }: LawCardProps) {
   const { t } = useTranslation();
   const [showOriginal, setShowOriginal] = useState(false);
+  const [showFilingModal, setShowFilingModal] = useState(false);
   const hasRelevance = law.relevance_score != null && !isNaN(law.relevance_score);
   const relevancePercent = hasRelevance ? Math.round((law.relevance_score ?? 0) * 100) : 0;
 
@@ -98,9 +100,27 @@ export default function LawCard({ law, index }: LawCardProps) {
           {showOriginal ? t("hideOriginal") : t("viewOriginal")}
         </button>
 
+        {/* File Case Button — NEW */}
+        <button
+          onClick={() => setShowFilingModal(true)}
+          className="btn-primary text-sm flex items-center gap-2"
+          id={`file-case-${law.section_id}`}
+          title="File a case under this law"
+        >
+          <span className="text-lg">⚖️</span>
+          File a Case
+        </button>
+
         {/* Filing Link */}
         <FilingLink url={law.filing_link ?? null} actName={law.act_name} />
       </div>
+
+      {/* Filing Modal — NEW */}
+      <FilingModal
+        actCode={law.section_id || law.act_name || "DEFAULT"}
+        isOpen={showFilingModal}
+        onClose={() => setShowFilingModal(false)}
+      />
 
       {/* Collapsible Original Text */}
       {showOriginal && (
