@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.services import embed_service, cache_service, translate_service
 from app.services.generate_service import generate_query_response, general_legal_answer
+from app.services import indiakanoon_service, indiacode_scraper_service
 from app.schemas.query import QueryResponse, LawResult
 
 logger = logging.getLogger("lexindia.services.rag")
@@ -339,15 +340,69 @@ async def _process_web_results(
 
 
 async def _crawl_indiacode(query: str, query_id: str):
-    """Attempt to crawl indiacode.nic.in for query.
+    """Real web crawl using Indian Kanoon API + Indiacode scraper.
     
-    Returns list of laws found on website or empty list if crawl fails.
+    Tier 2 fallback: When database confidence is medium (50-70%), 
+    try to find laws from official government sources.
+    
+    Uses:
+    1. api.indiankanoon.org - For case law and judicial precedents
+    2. indiacode.nic.in scraper - For official law text (with Playwright)
+    
+    Returns list of laws found on official websites or empty list if crawl fails.
     """
     try:
-        # For now, return empty list as placeholder
-        # In production, this would use Selenium or requests to scrape indiacode.nic.in
-        logger.warning(f"[{query_id}] Web crawl not yet implemented (placeholder)")
-        return []
+        logger.info(f"[{query_id}] === TIER 2: Web Crawl Starting ===")
+        web_results = []
+        
+        # ── Step 1: Search Indian Kanoon API (Fast, no browser needed) ──
+        logger.info(f"[{query_id}] Searching Indian Kanoon API...")
+        kanoon_results = await indiakanoon_service.search_indiakanoon(query, limit=3)
+        
+        if kanoon_results:
+            logger.info(f"[{query_id}] Indian Kanoon found {len(kanoon_results)} results")
+            for result in kanoon_results:
+                web_results.append({
+                    "title": result.get("title"),
+                    "summary": result.get("summary"),
+                    "url": result.get("url"),
+                    "source": "Indian Kanoon (Case Law)",
+                    "relevance_score": min(result.get("relevance", 0) / 100, 1.0),  # Normalize score
+                    "severity": "high" if any(keyword in result.get("title", "").lower() 
+                                             for keyword in ["criminal", "punishment", "imprisonment"]) else "medium"
+                })
+        else:
+            logger.info(f"[{query_id}] Indian Kanoon returned no results")
+        
+        # ── Step 2: Search Indiacode.nic.in (Slower, uses Playwright scraper) ──
+        # Only attempt if Playwright is available and we need more results
+        if len(web_results) < 3:
+            logger.info(f"[{query_id}] Attempting Indiacode scrape...")
+            try:
+                indiacode_results = await indiacode_scraper_service.search_indiacode(query, limit=3)
+                
+                if indiacode_results:
+                    logger.info(f"[{query_id}] Indiacode found {len(indiacode_results)} results")
+                    for result in indiacode_results:
+                        web_results.append({
+                            "title": result.get("title"),
+                            "summary": result.get("summary"),
+                            "url": result.get("url"),
+                            "source": "Indiacode.nic.in (Official)",
+                            "relevance_score": 0.75,  # Official source
+                            "severity": "high"
+                        })
+                else:
+                    logger.info(f"[{query_id}] Indiacode returned no results (Playwright may not be installed)")
+            except ImportError:
+                logger.warning(f"[{query_id}] Playwright not installed - skipping Indiacode scrape")
+                logger.info("To enable: pip install playwright && playwright install chromium")
+            except Exception as e:
+                logger.error(f"[{query_id}] Indiacode scrape failed: {e}")
+        
+        logger.info(f"[{query_id}] Web crawl complete: {len(web_results)} total results")
+        return web_results
+        
     except Exception as e:
         logger.error(f"[{query_id}] Web crawl failed: {e}")
         return []
