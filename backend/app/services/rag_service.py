@@ -22,7 +22,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.services import embed_service, cache_service, translate_service
 from app.services.generate_service import generate_query_response, general_legal_answer
-from app.services import indiakanoon_service, indiacode_scraper_service
 from app.schemas.query import QueryResponse, LawResult
 
 logger = logging.getLogger("lexindia.services.rag")
@@ -340,71 +339,109 @@ async def _process_web_results(
 
 
 async def _crawl_indiacode(query: str, query_id: str):
-    """Real web crawl using Indian Kanoon API + Indiacode scraper.
+    """Crawl indiacode.nic.in and api.indiankanoon.org for real-time law sections.
     
-    Tier 2 fallback: When database confidence is medium (50-70%), 
-    try to find laws from official government sources.
+    Returns list of laws found from:
+    1. indiacode.nic.in - Official government law portal
+    2. api.indiankanoon.org - Indian legal judgments database
     
-    Uses:
-    1. api.indiankanoon.org - For case law and judicial precedents
-    2. indiacode.nic.in scraper - For official law text (with Playwright)
-    
-    Returns list of laws found on official websites or empty list if crawl fails.
+    Returns list of laws or empty list if crawl fails.
     """
     try:
-        logger.info(f"[{query_id}] === TIER 2: Web Crawl Starting ===")
-        web_results = []
+        import requests
+        from bs4 import BeautifulSoup
         
-        # ── Step 1: Search Indian Kanoon API (Fast, no browser needed) ──
-        logger.info(f"[{query_id}] Searching Indian Kanoon API...")
-        kanoon_results = await indiakanoon_service.search_indiakanoon(query, limit=3)
+        laws_found = []
         
-        if kanoon_results:
-            logger.info(f"[{query_id}] Indian Kanoon found {len(kanoon_results)} results")
-            for result in kanoon_results:
-                web_results.append({
-                    "title": result.get("title"),
-                    "summary": result.get("summary"),
-                    "url": result.get("url"),
-                    "source": "Indian Kanoon (Case Law)",
-                    "relevance_score": min(result.get("relevance", 0) / 100, 1.0),  # Normalize score
-                    "severity": "high" if any(keyword in result.get("title", "").lower() 
-                                             for keyword in ["criminal", "punishment", "imprisonment"]) else "medium"
-                })
+        # ── Strategy 1: Query api.indiankanoon.org ──────────────────────
+        try:
+            logger.info(f"[{query_id}] Querying api.indiankanoon.org for: {query}")
+            
+            # Search Indian Kanoon API
+            api_url = "https://api.indiankanoon.org/search"
+            params = {
+                "query": query,
+                "results": 5,
+                "sortby": "score"
+            }
+            
+            response = requests.get(api_url, params=params, timeout=5)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if data.get("response", {}).get("docs"):
+                for doc in data["response"]["docs"][:5]:
+                    law_section = {
+                        "section_id": f"IK-{doc.get('caseid', 'unknown')[:20]}",
+                        "section_title": doc.get("title", "Unknown Case"),
+                        "section_text": doc.get("body_text", "")[:500],
+                        "simplified_en": doc.get("title", "Case law from Indian Kanoon"),
+                        "act_name": "Case Law - Indian Kanoon",
+                        "severity": "medium",
+                        "punishment": "Refer to full judgment",
+                        "relevance_score": 0.75,
+                        "source": "indiankanoon.org"
+                    }
+                    laws_found.append(law_section)
+                    logger.info(f"[{query_id}] Found from IndianKanoon: {law_section['section_title'][:50]}")
+                    
+        except Exception as e:
+            logger.warning(f"[{query_id}] IndianKanoon API query failed: {e}")
+        
+        # ── Strategy 2: Query indiacode.nic.in via simple HTTP search ──
+        try:
+            logger.info(f"[{query_id}] Querying indiacode.nic.in for: {query}")
+            
+            # Construct search URL
+            search_url = f"https://www.indiacode.nic.in/result?q={query.replace(' ', '+')}"
+            
+            response = requests.get(search_url, timeout=5, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            })
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Parse search results
+            result_links = soup.find_all('a', class_='resultlink', limit=5)
+            
+            for link in result_links:
+                try:
+                    title = link.get_text(strip=True)
+                    href = link.get('href', '')
+                    
+                    if title and href:
+                        law_section = {
+                            "section_id": f"IC-{href.split('/')[-1][:20]}",
+                            "section_title": title[:100],
+                            "section_text": f"Found on indiacode.nic.in: {title}",
+                            "simplified_en": title[:100],
+                            "act_name": "Indian Law - IndiaCode",
+                            "severity": "high",
+                            "punishment": "Refer to official law portal",
+                            "relevance_score": 0.72,
+                            "source": "indiacode.nic.in"
+                        }
+                        laws_found.append(law_section)
+                        logger.info(f"[{query_id}] Found from IndiaCode: {title[:50]}")
+                        
+                except Exception as e:
+                    logger.warning(f"[{query_id}] Error parsing IndiaCode result: {e}")
+                    continue
+                    
+        except Exception as e:
+            logger.warning(f"[{query_id}] IndiaCode query failed: {e}")
+        
+        if laws_found:
+            logger.info(f"[{query_id}] Web crawl found {len(laws_found)} laws")
         else:
-            logger.info(f"[{query_id}] Indian Kanoon returned no results")
-        
-        # ── Step 2: Search Indiacode.nic.in (Slower, uses Playwright scraper) ──
-        # Only attempt if Playwright is available and we need more results
-        if len(web_results) < 3:
-            logger.info(f"[{query_id}] Attempting Indiacode scrape...")
-            try:
-                indiacode_results = await indiacode_scraper_service.search_indiacode(query, limit=3)
-                
-                if indiacode_results:
-                    logger.info(f"[{query_id}] Indiacode found {len(indiacode_results)} results")
-                    for result in indiacode_results:
-                        web_results.append({
-                            "title": result.get("title"),
-                            "summary": result.get("summary"),
-                            "url": result.get("url"),
-                            "source": "Indiacode.nic.in (Official)",
-                            "relevance_score": 0.75,  # Official source
-                            "severity": "high"
-                        })
-                else:
-                    logger.info(f"[{query_id}] Indiacode returned no results (Playwright may not be installed)")
-            except ImportError:
-                logger.warning(f"[{query_id}] Playwright not installed - skipping Indiacode scrape")
-                logger.info("To enable: pip install playwright && playwright install chromium")
-            except Exception as e:
-                logger.error(f"[{query_id}] Indiacode scrape failed: {e}")
-        
-        logger.info(f"[{query_id}] Web crawl complete: {len(web_results)} total results")
-        return web_results
+            logger.info(f"[{query_id}] Web crawl found no laws for: {query}")
+            
+        return laws_found
         
     except Exception as e:
-        logger.error(f"[{query_id}] Web crawl failed: {e}")
+        logger.error(f"[{query_id}] Web crawl critical error: {e}")
         return []
 
 
