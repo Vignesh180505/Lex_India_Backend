@@ -18,7 +18,7 @@ from app.config import settings
 from app.database import Base
 
 # Import all models so Base.metadata is populated for autogenerate
-from app.models import Law, FilingLink, QueryLog  # noqa: F401
+from app.models import Law, FilingLink, QueryLog, JudgmentCache  # noqa: F401
 
 # ── Alembic Config ───────────────────────────────────────────────────────
 config = context.config

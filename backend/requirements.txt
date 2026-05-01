@@ -32,3 +32,6 @@ celery[redis]
 python-dotenv
 httpx
 numpy
+
+# PDF Generation
+reportlab

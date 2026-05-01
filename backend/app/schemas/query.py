@@ -7,8 +7,10 @@ These schemas enforce strict typing at the API boundary:
 """
 
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from pydantic import BaseModel, Field, computed_field
+from typing import List, Optional, Literal, Union
 
+DRAFTABLE_ACT_CODES = {"CPA", "IPC", "RTI", "MVA", "ICA"}
 
 class QueryRequest(BaseModel):
     """Request body for POST /api/query."""
@@ -25,6 +27,10 @@ class QueryRequest(BaseModel):
         pattern="^(en|ta|hi)$",
         description="Response language code: en (English), ta (Tamil), hi (Hindi).",
     )
+    mode: Literal["citizen", "lawyer"] = Field(
+        default="citizen",
+        description="Search mode: citizen or lawyer",
+    )
 
 
 class LawResult(BaseModel):
@@ -32,6 +38,7 @@ class LawResult(BaseModel):
 
     section_id: str = Field(..., description="Unique section identifier, e.g. CPA-72.")
     act_name: str = Field(..., description="Full name of the Act.")
+    act_code: Optional[str] = None
     section_number: str = Field(..., description="Section number within the Act.")
     section_title: str = Field(..., description="Title of the section.")
     original_text: str = Field(..., description="Verbatim original legal text.")
@@ -56,6 +63,12 @@ class LawResult(BaseModel):
         description="Cosine similarity score (1.0 = most relevant).",
     )
 
+    @computed_field
+    @property
+    def draftable(self) -> bool:
+        """True if this section belongs to an Act that supports document drafting."""
+        return bool(self.act_code and self.act_code in DRAFTABLE_ACT_CODES)
+
 
 class QueryResponse(BaseModel):
     """Response body for POST /api/query."""
@@ -74,3 +87,36 @@ class QueryResponse(BaseModel):
     response_ms: int = Field(
         ..., description="Total response time in milliseconds."
     )
+
+
+class JudgmentResult(BaseModel):
+    title: str
+    court: str
+    year: int
+    citation: str
+    summary: str
+    precedent_type: str     # "positive"|"negative"|"neutral"|"overruled"
+    url: str
+
+
+class LawyerLawResult(BaseModel):
+    section_id: str
+    act_name: str
+    act_code: str
+    section_number: str
+    section_title: str
+    original_text: str
+    citation: str           # e.g. "Section 302, Indian Penal Code 1860"
+    cross_references: list[str]
+    amendment_note: str | None
+    relevance_score: float
+    judgments: list[JudgmentResult]
+
+
+class LawyerQueryResponse(BaseModel):
+    query_id: str
+    mode: str = "lawyer"
+    legal_analysis: str
+    applicable_sections: list[LawyerLawResult]
+    procedural_notes: str
+    response_ms: int

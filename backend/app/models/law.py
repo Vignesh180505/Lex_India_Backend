@@ -18,6 +18,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    ARRAY,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from pgvector.sqlalchemy import Vector
@@ -60,6 +61,8 @@ class Law(Base):
     amendment_year = Column(Integer, nullable=True)
     source_url = Column(Text, nullable=True)
     filing_link = Column(Text, nullable=True)
+    cross_references = Column(ARRAY(Text), default=[])
+    amendment_note = Column(Text, nullable=True)
 
     # Timestamps
     scraped_at = Column(

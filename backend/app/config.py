@@ -5,6 +5,7 @@ for local development. In production, values are injected via Docker/Railway.
 """
 
 from typing import List
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,6 +32,9 @@ class Settings(BaseSettings):
     GROK_API_KEY: str = ""
     # Comma-separated list: "openai,gemini,grok"
     LLM_PROVIDER_ORDER: str = "openai,gemini,grok"
+    INDIAN_KANOON_API_KEY: str = ""
+    # Legacy alias — kept for backward compatibility with existing .env files
+    KANOON_API_KEY: str = ""
 
     # ── Application ──────────────────────────────────────────────────────
     SECRET_KEY: str = "change-me-in-production"
@@ -48,11 +52,19 @@ class Settings(BaseSettings):
     SIMILARITY_THRESHOLD: float = 0.70  # Increased from 0.50 for higher confidence
     MAX_RESULTS: int = 8
     CACHE_TTL_SECONDS: int = 86400  # 24 hours
+    CACHE_VERSION: str = "v3"
     MIN_RESULT_CONFIDENCE: float = 0.60  # Warn if confidence below this
     
     # ── Data Quality ───────────────────────────────────────────────
     MIN_SECTION_TEXT_LENGTH: int = 100  # Minimum characters for valid section
     MIN_SIMPLIFIED_TEXT_LENGTH: int = 50  # Minimum characters for simplified text
+
+    @model_validator(mode="after")
+    def _backfill_kanoon_key(self) -> "Settings":
+        """If INDIAN_KANOON_API_KEY is empty, fall back to legacy KANOON_API_KEY."""
+        if not self.INDIAN_KANOON_API_KEY and self.KANOON_API_KEY:
+            self.INDIAN_KANOON_API_KEY = self.KANOON_API_KEY
+        return self
 
     @property
     def llm_providers(self) -> List[str]:

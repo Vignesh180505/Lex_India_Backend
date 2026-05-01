@@ -5,7 +5,7 @@ echo Starting LexIndia Backend...
 cd backend
 
 :: Activate python venv
-call venv\Scripts\activate.bat
+call ..\.venv\Scripts\activate.bat
 
 :: Start the FastAPI server using uvicorn
 echo Starting FastAPI on http://localhost:8000

@@ -15,6 +15,7 @@ Usage:
 
 import asyncio
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -38,6 +39,18 @@ BATCH_SIZE = 20
 BATCH_DELAY = 1.0  # seconds between batches (rate limit safety)
 
 
+def _section_filter_ids() -> list[str]:
+    """Optional comma-separated section filter from env.
+
+    Example:
+        SIMPLIFY_SECTION_IDS=MVA-117,MVA-66,IPC-294
+    """
+    raw = os.getenv("SIMPLIFY_SECTION_IDS", "").strip()
+    if not raw:
+        return []
+    return [s.strip() for s in raw.split(",") if s.strip()]
+
+
 async def run_simplification() -> None:
     """Process all unsimplified laws through GPT-4o."""
     start_time = time.time()
@@ -45,16 +58,24 @@ async def run_simplification() -> None:
     errors = 0
     total_tokens = 0
 
+    filter_ids = _section_filter_ids()
+
     async with async_session_factory() as session:
         # Get all rows that need simplification
-        result = await session.execute(
-            text("""
+        query = """
                 SELECT id, section_id, act_name, section_text
                 FROM laws
                 WHERE simplified_en IS NULL
-                ORDER BY act_code, section_number
-            """)
-        )
+            """
+        params: dict[str, object] = {}
+        if filter_ids:
+            query += " AND section_id = ANY(:section_ids)"
+            params["section_ids"] = filter_ids
+            logger.info(f"Applying SIMPLIFY_SECTION_IDS filter: {filter_ids}")
+
+        query += " ORDER BY act_code, section_number"
+
+        result = await session.execute(text(query), params)
         rows = result.fetchall()
         total = len(rows)
 

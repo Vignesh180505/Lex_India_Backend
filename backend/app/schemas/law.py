@@ -3,9 +3,12 @@
 Used by the GET /api/laws browse endpoint for listing and filtering laws.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 from typing import List, Optional
 from datetime import datetime
+
+# Acts whose sections support "Draft Document" actions
+DRAFTABLE_ACT_CODES = {"CPA", "IPC", "RTI", "MVA", "ICA"}
 
 
 class LawSchema(BaseModel):
@@ -26,6 +29,12 @@ class LawSchema(BaseModel):
     source_url: Optional[str] = None
     filing_link: Optional[str] = None
     scraped_at: Optional[datetime] = None
+
+    @computed_field
+    @property
+    def draftable(self) -> bool:
+        """True if this section belongs to an Act that supports document drafting."""
+        return self.act_code in DRAFTABLE_ACT_CODES
 
     class Config:
         """Enable ORM mode for SQLAlchemy model conversion."""

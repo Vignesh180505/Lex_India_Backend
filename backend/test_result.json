@@ -1,0 +1,20 @@
+{
+  "query_id": "195b4518-665d-471f-9448-fb6e75d7d596",
+  "detected_language": "en",
+  "ai_summary": "⚠️ AI SUMMARY UNAVAILABLE: Database results below. Consult a legal professional for advice specific to your situation.\n\n⚠️ LEGAL DISCLAIMER: This information is for general reference only and is NOT legal advice. The simplified explanations may not capture all legal nuances. Always consult a qualified legal professional for advice specific to your situation.",
+  "laws": [
+    {
+      "section_id": "MVA-117",
+      "act_name": "Motor Vehicles Act, 1988",
+      "section_number": "117",
+      "section_title": "Duty of drivers and conductors to obey lawful directions and issue tickets/fare compliance",
+      "original_text": "Section 117, Motor Vehicles Act, 1988: The driver and conductor of a stage carriage shall perform duties as prescribed by rules, including proper issue of tickets, compliance with fare rules, and conduct obligations toward passengers. Failure to perform prescribed conductor duties is punishable as provided under the Act/rules.",
+      "simplified": "Bus conductor did not give me change and overcharged ticket fare. A transport conductor has legal duty to return balance amount and issue proper fare ticket to passengers.",
+      "severity": "medium",
+      "punishment": "Contravention of prescribed conductor duties may attract penalty under the Motor Vehicles Act and applicable State rules.",
+      "filing_link": null,
+      "relevance_score": 0.9
+    }
+  ],
+  "response_ms": 6
+}

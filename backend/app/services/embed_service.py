@@ -12,11 +12,10 @@ Must be the same model used in setup/generate_embeddings.py for compatible vecto
 import logging
 
 from sentence_transformers import SentenceTransformer
-import numpy as np
 
 from app.config import settings
 
-logger = logging.getLogger("lexindia.services.embed")
+logger = logging.getLogger("lexindia.embed")
 
 # ── Singleton Model ───────────────────────────────────────────────────────
 _model: SentenceTransformer | None = None
@@ -26,10 +25,10 @@ def get_model() -> SentenceTransformer:
     """Load the embedding model (singleton — only loads once)."""
     global _model
     if _model is None:
-        logger.info(f"Loading embedding model: {settings.EMBEDDING_MODEL}")
+        logger.info("Loading all-MiniLM-L6-v2 model...")
         _model = SentenceTransformer(settings.EMBEDDING_MODEL)
         logger.info(
-            f"Embedding model loaded. Dimension: {_model.get_sentence_embedding_dimension()}"
+            f"Model loaded. Test embedding dim: {len(_model.encode('test').tolist())}"
         )
     return _model
 

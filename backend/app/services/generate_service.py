@@ -25,7 +25,8 @@ _gemini_model: Optional[genai.GenerativeModel] = None
 def get_openai_client() -> AsyncOpenAI:
     global _openai_client
     if _openai_client is None:
-        _openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        from app.services.openai_client import openai_client
+        _openai_client = openai_client
     return _openai_client
 
 def get_grok_client() -> AsyncOpenAI:
@@ -41,8 +42,8 @@ def get_grok_client() -> AsyncOpenAI:
 def get_gemini_model() -> genai.GenerativeModel:
     global _gemini_model
     if _gemini_model is None:
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        _gemini_model = genai.GenerativeModel("gemini-1.5-pro")
+        genai.configure(api_key=settings.GEMINI_API_KEY.strip() if settings.GEMINI_API_KEY else None)
+        _gemini_model = genai.GenerativeModel("gemini-2.5-flash")
     return _gemini_model
 
 # ── System Prompts ────────────────────────────────────────────────────────
@@ -87,41 +88,46 @@ Rules:
 
 async def _call_openai(system_prompt: str, user_message: str, response_format: str = "json_object") -> str:
     client = get_openai_client()
-    response = await client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
+    kwargs = {
+        "model": "gpt-4o",
+        "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
         ],
-        response_format={"type": response_format},
-        max_tokens=800,
-        temperature=0.2,
-    )
+        "max_tokens": 2000 if response_format == "text" else 800,
+        "temperature": 0.2,
+    }
+    # Only set response_format for JSON — omit for plain text
+    if response_format == "json_object":
+        kwargs["response_format"] = {"type": "json_object"}
+    response = await client.chat.completions.create(**kwargs)
     return response.choices[0].message.content
 
 async def _call_grok(system_prompt: str, user_message: str, response_format: str = "json_object") -> str:
     client = get_grok_client()
-    response = await client.chat.completions.create(
-        model="grok-beta", # Replace with actual Grok model name
-        messages=[
+    kwargs = {
+        "model": "grok-beta",
+        "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
         ],
-        response_format={"type": response_format},
-        max_tokens=800,
-        temperature=0.2,
-    )
+        "max_tokens": 2000 if response_format == "text" else 800,
+        "temperature": 0.2,
+    }
+    if response_format == "json_object":
+        kwargs["response_format"] = {"type": "json_object"}
+    response = await client.chat.completions.create(**kwargs)
     return response.choices[0].message.content
 
-async def _call_gemini(system_prompt: str, user_message: str) -> str:
+async def _call_gemini(system_prompt: str, user_message: str, response_mime: str = "application/json") -> str:
     model = get_gemini_model()
     # Combine system prompt and user message for Gemini
     full_prompt = f"{system_prompt}\n\nUSER INPUT:\n{user_message}"
     response = await model.generate_content_async(
         full_prompt,
         generation_config=genai.types.GenerationConfig(
-            response_mime_type="application/json",
-            max_output_tokens=800,
+            response_mime_type=response_mime,
+            max_output_tokens=2000 if response_mime == "text/plain" else 800,
             temperature=0.2,
         )
     )

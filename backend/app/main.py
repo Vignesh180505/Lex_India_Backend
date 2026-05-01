@@ -17,7 +17,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.routers import health, query, laws
+from app.routers import health, query, laws, draft, judgments
+from app.services.embed_service import get_model
 
 # ── Logging ───────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -36,6 +37,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Embedding model: {settings.EMBEDDING_MODEL}")
     logger.info(f"Similarity threshold: {settings.SIMILARITY_THRESHOLD}")
+    get_model()
     yield
     logger.info("LexIndia backend shutting down...")
 
@@ -94,3 +96,5 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(health.router)
 app.include_router(query.router, prefix="/api")
 app.include_router(laws.router, prefix="/api")
+app.include_router(draft.router, prefix="/api")
+app.include_router(judgments.router, prefix="/api")

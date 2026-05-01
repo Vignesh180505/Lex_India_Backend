@@ -42,7 +42,7 @@ def make_cache_key(query_text: str) -> str:
         MD5 hex digest as cache key.
     """
     normalized = query_text.lower().strip()
-    return f"lexindia:query:{hashlib.md5(normalized.encode()).hexdigest()}"
+    return f"lexindia:query:{settings.CACHE_VERSION}:{hashlib.md5(normalized.encode()).hexdigest()}"
 
 
 async def get(cache_key: str) -> Optional[dict]:

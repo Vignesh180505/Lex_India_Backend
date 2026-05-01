@@ -17,6 +17,7 @@ Usage:
 
 import asyncio
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -40,6 +41,18 @@ logger = logging.getLogger("lexindia.setup.embeddings")
 BATCH_SIZE = 64  # Process 64 rows at a time to manage memory
 
 
+def _section_filter_ids() -> list[str]:
+    """Optional comma-separated section filter from env.
+
+    Example:
+        EMBED_SECTION_IDS=MVA-117,MVA-66,IPC-294
+    """
+    raw = os.getenv("EMBED_SECTION_IDS", "").strip()
+    if not raw:
+        return []
+    return [s.strip() for s in raw.split(",") if s.strip()]
+
+
 async def run_embedding_generation() -> None:
     """Generate embeddings for all sections with simplified_en but no embedding."""
     start_time = time.time()
@@ -59,19 +72,26 @@ async def run_embedding_generation() -> None:
 
     processed = 0
     errors = 0
+    filter_ids = _section_filter_ids()
 
     async with async_session_factory() as session:
         # Get all rows needing embeddings
-        result = await session.execute(
-            text("""
+        query = """
                 SELECT id, section_id, simplified_en
                 FROM laws
                 WHERE simplified_en IS NOT NULL
                   AND simplified_en != ''
                   AND embedding IS NULL
-                ORDER BY act_code, section_number
-            """)
-        )
+            """
+        params: dict[str, object] = {}
+        if filter_ids:
+            query += " AND section_id = ANY(:section_ids)"
+            params["section_ids"] = filter_ids
+            logger.info(f"Applying EMBED_SECTION_IDS filter: {filter_ids}")
+
+        query += " ORDER BY act_code, section_number"
+
+        result = await session.execute(text(query), params)
         rows = result.fetchall()
         total = len(rows)
 

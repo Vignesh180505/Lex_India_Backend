@@ -61,3 +61,11 @@ out/
 # Cache
 .cache/
 *.cache
+
+# Ignore environment files
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+*.venv

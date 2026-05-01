@@ -6,6 +6,8 @@ Provides:
 - Dependency injection helper `get_db` for FastAPI router endpoints.
 """
 
+from collections.abc import AsyncGenerator
+
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -41,7 +43,7 @@ class Base(DeclarativeBase):
 
 
 # ── Dependency Injection ─────────────────────────────────────────────────
-async def get_db() -> AsyncSession:
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Yield an async database session for FastAPI dependency injection."""
     async with async_session_factory() as session:
         try:

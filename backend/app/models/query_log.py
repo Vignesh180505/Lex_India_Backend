@@ -28,6 +28,7 @@ class QueryLog(Base):
     language = Column(String(10), nullable=False)
     results_count = Column(Integer, nullable=True)
     response_ms = Column(Integer, nullable=True)
+    mode = Column(String(10), default="citizen", nullable=False)
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
