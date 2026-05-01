@@ -100,7 +100,7 @@ export default function LawCard({ law, index }: LawCardProps) {
           {showOriginal ? t("hideOriginal") : t("viewOriginal")}
         </button>
 
-        {/* File Case Button — NEW */}
+        {/* File Case Button */}
         <button
           onClick={() => setShowFilingModal(true)}
           className="btn-primary text-sm flex items-center gap-2"
@@ -110,6 +110,19 @@ export default function LawCard({ law, index }: LawCardProps) {
           <span className="text-lg">⚖️</span>
           File a Case
         </button>
+
+        {/* Draft Document Button — only for draftable acts */}
+        {law.draftable && (
+          <a
+            href={`/drafting?act=${encodeURIComponent(law.act_name)}&section=${encodeURIComponent(law.section_id)}`}
+            className="btn-secondary text-sm flex items-center gap-2 hover:border-emerald-500/40 hover:text-emerald-300"
+            id={`draft-doc-${law.section_id}`}
+            title="Generate a legal document based on this law"
+          >
+            <span className="text-lg">📝</span>
+            Draft Document
+          </a>
+        )}
 
         {/* Filing Link */}
         <FilingLink url={law.filing_link ?? null} actName={law.act_name} />

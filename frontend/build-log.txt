@@ -29,4 +29,3 @@ Route (app)                              Size     First Load JS
 
 
 Γùï  (Static)  prerendered as static content
-

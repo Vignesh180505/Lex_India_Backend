@@ -11,25 +11,35 @@ import en from "../public/locales/en/translation.json";
 import ta from "../public/locales/ta/translation.json";
 import hi from "../public/locales/hi/translation.json";
 
-i18n
-  .use(LanguageDetector)
-  .use(initReactI18next)
-  .init({
-    resources: {
-      en: { translation: en },
-      ta: { translation: ta },
-      hi: { translation: hi },
-    },
-    fallbackLng: "en",
-    supportedLngs: ["en", "ta", "hi"],
-    interpolation: {
-      escapeValue: false,
-    },
-    detection: {
-      order: ["localStorage", "navigator"],
-      lookupLocalStorage: "lexindia-lang",
-      caches: ["localStorage"],
-    },
-  });
+const isBrowser = typeof window !== "undefined";
 
-export default i18n;
+const resources = {
+  en: { translation: en },
+  ta: { translation: ta },
+  hi: { translation: hi },
+};
+
+const i18nInstance = i18n.createInstance();
+
+// Client-side vs. Server-side initialization
+const initOptions = {
+  resources,
+  supportedLngs: ["en", "ta", "hi"],
+  fallbackLng: "en",
+  interpolation: {
+    escapeValue: false,
+  },
+  react: {
+    useSuspense: false, // Important for avoiding hydration issues
+  },
+  // Explicitly set language on server
+  lng: isBrowser ? undefined : "en",
+};
+
+if (isBrowser) {
+  i18nInstance.use(LanguageDetector);
+}
+
+i18nInstance.use(initReactI18next).init(initOptions);
+
+export default i18nInstance;

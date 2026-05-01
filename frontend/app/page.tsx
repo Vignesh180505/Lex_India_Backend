@@ -5,14 +5,16 @@
  * Features: animated hero, full-width search textarea, example prompts, category shortcuts.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import "@/lib/i18n";
 
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import ModeToggle from "@/components/ModeToggle";
 import QueryInput from "@/components/QueryInput";
 import { queryLaws, type QueryResponse } from "@/lib/api";
+import { useMode } from "@/lib/useMode";
 
 const CATEGORIES = [
   { id: "criminal", icon: "⚖️", color: "from-red-500/20 to-red-600/10 border-red-500/20 hover:border-red-500/40" },
@@ -25,14 +27,20 @@ export default function HomePage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isHydrated, setIsHydrated] = useState(false);
+  const mode = useMode();
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   const handleQuery = async (query: string) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const lang = i18n.language || "en";
-      const result: QueryResponse = await queryLaws(query, lang);
+      const lang = (i18n.language || "en").substring(0, 2);
+      const result: QueryResponse = await queryLaws(query, lang, mode);
 
       // Store result in sessionStorage for the results page
       sessionStorage.setItem("lexindia-results", JSON.stringify(result));
@@ -58,7 +66,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* ── Navigation ───────────────────────────────────────────────── */}
-      <nav className="w-full px-6 py-4 flex items-center justify-between border-b border-surface-800/50 backdrop-blur-xl bg-surface-950/80 sticky top-0 z-50">
+      <nav className={`w-full px-6 py-4 flex items-center justify-between border-b backdrop-blur-xl bg-surface-950/80 sticky top-0 z-50 ${mode === "lawyer" ? "border-amber-500/50 border-b-2" : "border-surface-800/50"}`}>
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-saffron-500 flex items-center justify-center shadow-lg shadow-brand-500/20">
             <span className="text-white font-bold text-sm">LI</span>
@@ -68,12 +76,27 @@ export default function HomePage() {
           </span>
         </div>
         <div className="flex items-center gap-4">
+          <ModeToggle />
           <a
             href="/browse"
             className="text-sm text-surface-400 hover:text-surface-200 transition-colors hidden sm:block"
             id="nav-browse"
           >
             {t("browseLaws")}
+          </a>
+          <a
+            href="/drafting"
+            className="text-sm text-surface-400 hover:text-surface-200 transition-colors hidden sm:block"
+            id="nav-drafting"
+          >
+            📝 Legal Tools
+          </a>
+          <a
+            href="/judgments/browse"
+            className="text-sm text-surface-400 hover:text-surface-200 transition-colors hidden sm:block"
+            id="nav-judgments"
+          >
+            ⚖️ Judgments
           </a>
           <LanguageSwitcher />
         </div>
