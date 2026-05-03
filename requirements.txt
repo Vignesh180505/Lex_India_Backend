@@ -1,0 +1,37 @@
+# LexIndia Backend Dependencies
+
+# Web framework
+fastapi
+uvicorn[standard]
+pydantic-settings
+
+# Database
+sqlalchemy[asyncio]
+asyncpg
+alembic
+pgvector
+
+# Redis
+redis[hiredis]
+
+# AI / ML
+openai
+sentence-transformers
+langchain
+langchain-openai
+
+# Scraping
+playwright
+beautifulsoup4
+lxml
+
+# Task queue
+celery[redis]
+
+# Utilities
+python-dotenv
+httpx
+numpy
+
+# PDF Generation
+reportlab
