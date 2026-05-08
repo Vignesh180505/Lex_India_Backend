@@ -85,6 +85,11 @@ class OutcomeAnalysisRequest(BaseModel):
         max_length=10,
         description="List of Indian Kanoon doc IDs to analyse.",
     )
+    language: str = Field(
+        default="en",
+        pattern="^(en|ta|hi)$",
+        description="Response language code.",
+    )
 
 
 class SingleOutcome(BaseModel):

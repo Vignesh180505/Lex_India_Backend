@@ -6,7 +6,7 @@
  */
 
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useLanguage } from "@/lib/TranslationContext";
 
 interface QueryInputProps {
   onSubmit: (query: string) => void;
@@ -14,7 +14,7 @@ interface QueryInputProps {
 }
 
 export default function QueryInput({ onSubmit, isLoading }: QueryInputProps) {
-  const { t } = useTranslation();
+  const { t } = useLanguage();
   const [query, setQuery] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -29,9 +29,9 @@ export default function QueryInput({ onSubmit, isLoading }: QueryInputProps) {
   };
 
   const examples = [
-    t("examplePrompts.1"),
-    t("examplePrompts.2"),
-    t("examplePrompts.3"),
+    t("examplePrompt1"),
+    t("examplePrompt2"),
+    t("examplePrompt3"),
   ];
 
   return (

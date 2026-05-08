@@ -6,8 +6,7 @@
  */
 
 import { useEffect, useState, useCallback } from "react";
-import { useTranslation } from "react-i18next";
-import "@/lib/i18n";
+import { useLanguage } from "@/lib/TranslationContext";
 
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import LawCard from "@/components/LawCard";
@@ -27,7 +26,7 @@ const ACTS = [
 ];
 
 export default function BrowsePage() {
-  const { t, i18n } = useTranslation();
+  const { t, language } = useLanguage();
   const [selectedAct, setSelectedAct] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -44,15 +43,16 @@ export default function BrowsePage() {
         search: search || undefined,
         page,
         per_page: 20,
+        language,
       });
       setData(result);
     } catch (err) {
       console.error("Browse failed:", err);
-      setError(t("errorGeneric"));
+      setError(t("error"));
     } finally {
       setIsLoading(false);
     }
-  }, [selectedAct, search, page, t]);
+  }, [selectedAct, search, page, t, language]);
 
   useEffect(() => {
     fetchLaws();
@@ -85,7 +85,7 @@ export default function BrowsePage() {
             {t("browseLaws")}
           </h1>
           <p className="text-surface-400">
-            Explore Indian laws by Act. Click on an Act to filter sections.
+            {t("browseSubtitle")}
           </p>
         </div>
 
@@ -102,7 +102,7 @@ export default function BrowsePage() {
               }`}
               id="filter-all"
             >
-              All Acts
+              {t("allActs")}
             </button>
             {ACTS.map((act) => (
               <button
@@ -136,7 +136,7 @@ export default function BrowsePage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search within sections..."
+              placeholder={t("searchPlaceholder")}
               className="input-glass pl-11 py-2.5"
               id="browse-search"
             />
@@ -169,7 +169,7 @@ export default function BrowsePage() {
         {!isLoading && data && (
           <>
             <div className="text-sm text-surface-500 mb-4">
-              {data.total} sections found • Page {data.page} of {data.total_pages}
+              {data.total} {t("sectionsFound")} • {t("page")} {data.page} {t("of")} {data.total_pages}
             </div>
 
             <div className="space-y-4">
@@ -187,10 +187,10 @@ export default function BrowsePage() {
                   className="btn-secondary text-sm disabled:opacity-30"
                   id="page-prev"
                 >
-                  {t("pagination.previous")}
+                  {t("prevPage")}
                 </button>
                 <span className="text-sm text-surface-400">
-                  {t("pagination.page")} {data.page} / {data.total_pages}
+                  {t("page")} {data.page} / {data.total_pages}
                 </span>
                 <button
                   onClick={() => setPage(Math.min(data.total_pages, page + 1))}
@@ -198,7 +198,7 @@ export default function BrowsePage() {
                   className="btn-secondary text-sm disabled:opacity-30"
                   id="page-next"
                 >
-                  {t("pagination.next")}
+                  {t("nextPage")}
                 </button>
               </div>
             )}
@@ -216,7 +216,7 @@ export default function BrowsePage() {
 
       <footer className="w-full px-6 py-6 text-center border-t border-surface-800/50">
         <p className="text-sm text-surface-500">
-          LexIndia — AI-powered legal access for every Indian citizen
+          {t("footerText")}
         </p>
       </footer>
     </div>

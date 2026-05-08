@@ -82,7 +82,18 @@ export async function queryLaws(
     language,
     mode,
   });
-  return response.data;
+  
+  // Fallback for unexpected response structures (e.g. during partial Lawyer Mode implementation)
+  const data = response.data;
+  if (!data.laws && (data as any).applicable_sections) {
+    data.laws = (data as any).applicable_sections;
+  }
+  if (!data.laws) {
+    data.laws = [];
+  }
+  
+  return data;
+
 }
 
 export async function browseLaws(params: {
@@ -91,6 +102,7 @@ export async function browseLaws(params: {
   severity?: string;
   page?: number;
   per_page?: number;
+  language?: string;
 }): Promise<LawListResponse> {
   const response = await api.get<LawListResponse>("/laws", { params });
   return response.data;

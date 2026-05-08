@@ -44,13 +44,22 @@ class Base(DeclarativeBase):
 
 # ── Dependency Injection ─────────────────────────────────────────────────
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Yield an async database session for FastAPI dependency injection."""
+    """Dependency for providing a transactional database session."""
     async with async_session_factory() as session:
         try:
             yield session
-            await session.commit()
+            # Only commit if the transaction is still active and NOT in a failed state
+            if session.is_active:
+                try:
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
+                    raise
         except Exception:
-            await session.rollback()
+            # Thoroughly ensure the session is rolled back on any outer exception
+            if session.is_active:
+                await session.rollback()
             raise
         finally:
             await session.close()
+

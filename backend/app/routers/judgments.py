@@ -79,28 +79,47 @@ def _build_card(doc: dict) -> JudgmentCard:
     )
 
 
-async def _simplify_snippet(snippet: str) -> str:
-    """Use Gemini/LLM to simplify a legal snippet for citizen mode.
+async def _process_snippet(snippet: str, language: str = "en", mode: str = "citizen") -> str:
+    """Use LLM to simplify or translate a legal snippet.
 
     Falls back to truncated raw snippet on any failure.
     """
     try:
         from app.services.generate_service import _call_llm_with_fallback
 
+        lang_name = "English"
+        if language == "ta":
+            lang_name = "Tamil"
+        elif language == "hi":
+            lang_name = "Hindi"
+
+        if mode == "citizen":
+            system_prompt = (
+                f"You are a legal simplifier. Rewrite the following court judgment "
+                f"excerpt in 2–3 simple sentences a non-lawyer can understand. "
+                f"CRITICAL RULE: The simplified text MUST be written in {lang_name}. "
+                f"Respond ONLY with the simplified text, no JSON."
+            )
+        else:
+            if language == "en":
+                return snippet[:500]  # No LLM call needed for English lawyer mode
+            system_prompt = (
+                f"You are a legal translator. Translate the following court judgment "
+                f"excerpt into {lang_name} while preserving its formal legal tone. "
+                f"Respond ONLY with the translated text, no JSON."
+            )
+
         result = await _call_llm_with_fallback(
-            system_prompt=(
-                "You are a legal simplifier. Rewrite the following court judgment "
-                "excerpt in 2–3 simple sentences a non-lawyer can understand. "
-                "Respond ONLY with the simplified text, no JSON."
-            ),
+            system_prompt=system_prompt,
             user_message=snippet[:1000],
-            task_name="Simplify judgment snippet",
+            task_name="Process judgment snippet",
+            response_format="text",
         )
         if isinstance(result, dict):
             return result.get("text", result.get("simplified", snippet[:300]))
         return str(result) if result else snippet[:300]
     except Exception as e:
-        logger.warning(f"Snippet simplification failed: {e}")
+        logger.warning(f"Snippet processing failed: {e}")
         return snippet[:300]
 
 
@@ -218,6 +237,7 @@ async def _cache_judgment_to_db(
         logger.info(f"Cached judgment doc_id={doc_id}")
     except Exception as e:
         logger.warning(f"Failed to cache judgment {doc_id}: {e}")
+        await db.rollback()
 
 
 # ── Route 1: Search Judgments ─────────────────────────────────────────────
@@ -274,15 +294,15 @@ async def search_judgments(
     # Build judgment cards
     cards = [_build_card(doc) for doc in docs[:10]]
 
-    # Citizen mode: simplify snippets using LLM
-    if request.mode == "citizen" and cards:
-        simplified = await asyncio.gather(
-            *[_simplify_snippet(card.snippet) for card in cards],
+    # Simplify or translate snippets
+    if request.mode == "citizen" or request.language != "en":
+        processed = await asyncio.gather(
+            *[_process_snippet(card.snippet, request.language, request.mode) for card in cards],
             return_exceptions=True,
         )
-        for card, simp in zip(cards, simplified):
-            if isinstance(simp, str) and simp:
-                card.snippet = simp
+        for card, proc in zip(cards, processed):
+            if isinstance(proc, str) and proc:
+                card.snippet = proc
 
     # Cache the full text of each judgment in the background
     for doc in docs[:10]:
@@ -327,6 +347,7 @@ async def search_judgments(
 async def get_similar_cases(
     query: str = Query(..., min_length=3, description="Legal query to find similar cases for."),
     mode: str = Query(default="citizen", description="citizen or lawyer"),
+    language: str = Query("en", description="Language code (en, ta, hi)."),
     db: AsyncSession = Depends(get_db),
 ) -> SimilarCasesResponse:
     """Fetch 3-5 similar past judgments for a given legal query.
@@ -337,7 +358,7 @@ async def get_similar_cases(
     logger.info(f"Similar cases for: '{query[:80]}'")
 
     # Check Redis cache
-    cache_key = f"lexindia:similar:{_query_hash(query)}"
+    cache_key = f"lexindia:similar:{_query_hash(query)}:{mode}:{language}"
     try:
         redis = await get_redis()
         cached = await redis.get(cache_key)
@@ -354,15 +375,15 @@ async def get_similar_cases(
 
     cards = [_build_card(doc) for doc in docs]
 
-    # Citizen mode: simplify snippets
-    if mode == "citizen" and cards:
-        simplified = await asyncio.gather(
-            *[_simplify_snippet(card.snippet) for card in cards],
+    # Simplify or translate snippets
+    if mode == "citizen" or language != "en":
+        processed = await asyncio.gather(
+            *[_process_snippet(card.snippet, language, mode) for card in cards],
             return_exceptions=True,
         )
-        for card, simp in zip(cards, simplified):
-            if isinstance(simp, str) and simp:
-                card.snippet = simp
+        for card, proc in zip(cards, processed):
+            if isinstance(proc, str) and proc:
+                card.snippet = proc
 
     response = SimilarCasesResponse(query=query, cases=cards)
 
@@ -382,14 +403,15 @@ async def get_similar_cases(
 
 # ── Route 3: Outcome Analysis ────────────────────────────────────────────
 
-OUTCOME_PROMPT = """Analyze this Indian court judgment. Return ONLY a JSON object with:
-{
+OUTCOME_PROMPT_TEMPLATE = """Analyze this Indian court judgment. Return ONLY a JSON object with:
+{{
   "outcome": "petitioner_won" | "respondent_won" | "partial" | "unclear",
   "petitioner_type": string (e.g. "tenant", "employee", "citizen"),
   "respondent_type": string (e.g. "landlord", "employer", "state"),
   "key_reason": string (one sentence summary of why)
-}
+}}
 
+CRITICAL RULE: The 'petitioner_type', 'respondent_type', and 'key_reason' values MUST be written in {lang_name}.
 Do not include any text outside the JSON object."""
 
 
@@ -444,9 +466,15 @@ async def analyze_outcomes(
                     key_reason="Insufficient judgment text available.",
                 )
 
+            lang_name = "English"
+            if request.language == "ta":
+                lang_name = "Tamil"
+            elif request.language == "hi":
+                lang_name = "Hindi"
+
             # Call LLM for outcome analysis
             parsed = await _call_llm_with_fallback(
-                OUTCOME_PROMPT,
+                OUTCOME_PROMPT_TEMPLATE.format(lang_name=lang_name),
                 full_text[:10000],
                 f"Outcome analysis for doc {doc_id}",
             )
@@ -517,17 +545,17 @@ async def analyze_outcomes(
                 key_reason=f"Analysis error: {str(e)[:100]}",
             )
 
-    # Run all analyses concurrently
-    results = await asyncio.gather(
-        *[_analyse_single(did) for did in request.doc_ids],
-        return_exceptions=True,
-    )
-
-    for r in results:
-        if isinstance(r, SingleOutcome):
-            outcomes.append(r)
-        elif isinstance(r, Exception):
-            logger.error(f"Outcome analysis exception: {r}")
+    # Run all analyses sequentially to avoid concurrent AsyncSession usage
+    for did in request.doc_ids:
+        try:
+            r = await _analyse_single(did)
+            if r:
+                outcomes.append(r)
+        except Exception as e:
+            logger.error(f"Outcome analysis exception for doc {did}: {e}")
+            # CRITICAL: Roll back the session so it can be used for the next doc in the loop
+            if db.is_active:
+                await db.rollback()
 
     # Aggregate results
     total = len(outcomes)

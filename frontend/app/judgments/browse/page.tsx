@@ -8,35 +8,17 @@
  * to full judgments on Indian Kanoon.
  */
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslation } from "react-i18next";
-import "@/lib/i18n";
+import { useLanguage } from "@/lib/TranslationContext";
 
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import ModeToggle from "@/components/ModeToggle";
 import { useMode } from "@/lib/useMode";
 import { searchJudgments, type JudgmentCard } from "@/lib/api";
 
-const COURTS = [
-  { value: "", label: "All Courts" },
-  { value: "Supreme Court", label: "Supreme Court" },
-  { value: "High Court", label: "High Court" },
-  { value: "District Court", label: "District Court" },
-];
-
-const CATEGORIES = [
-  { value: "", label: "All Categories" },
-  { value: "Criminal", label: "Criminal" },
-  { value: "Civil", label: "Civil" },
-  { value: "Family", label: "Family" },
-  { value: "Property", label: "Property" },
-  { value: "Labour", label: "Labour" },
-  { value: "Consumer", label: "Consumer" },
-];
-
 export default function JudgmentsBrowsePage() {
-  const { t } = useTranslation();
+  const { t, language, langCode } = useLanguage();
   const router = useRouter();
   const mode = useMode();
 
@@ -50,6 +32,24 @@ export default function JudgmentsBrowsePage() {
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
 
+  // Court options with translations
+  const COURTS = [
+    { value: "", label: t("allCourts") },
+    { value: "Supreme Court", label: t("supremeCourt") },
+    { value: "High Court", label: t("highCourt") },
+    { value: "District Court", label: t("districtCourt") },
+  ];
+
+  const CATEGORIES = [
+    { value: "", label: t("allCategories") },
+    { value: "Criminal", label: t("criminal") },
+    { value: "Civil", label: t("civil") },
+    { value: "Family", label: t("family") },
+    { value: "Property", label: t("property") },
+    { value: "Labour", label: t("labour") },
+    { value: "Consumer", label: t("consumer") },
+  ];
+
   const handleSearch = async (searchPage: number = 0, queryOverride?: string) => {
     const searchQuery = queryOverride ?? query;
     if (!searchQuery.trim()) return;
@@ -61,6 +61,7 @@ export default function JudgmentsBrowsePage() {
     try {
       const data = await searchJudgments({
         query: searchQuery.trim(),
+        language: langCode,
         mode,
         court: court || undefined,
         category: category || undefined,
@@ -69,9 +70,9 @@ export default function JudgmentsBrowsePage() {
       setJudgments(data.judgments || []);
       setTotalFound(data.total_found || 0);
       setHasSearched(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Judgment search failed:", err);
-      setError("Failed to search judgments. Please try again.");
+      setError(t("error"));
     } finally {
       setIsLoading(false);
     }
@@ -120,7 +121,7 @@ export default function JudgmentsBrowsePage() {
             className="text-sm text-surface-400 hover:text-surface-200 transition-colors hidden sm:block"
             id="nav-drafting"
           >
-            📝 Legal Tools
+            📝 {t("navDraft")}
           </a>
           <LanguageSwitcher />
         </div>
@@ -133,16 +134,15 @@ export default function JudgmentsBrowsePage() {
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-saffron-500/10 border border-saffron-500/20 mb-4">
             <span className="text-lg">⚖️</span>
             <span className="text-sm text-saffron-300 font-medium">
-              Court Judgments Database
+              {t("courtJudgmentsDatabase")}
             </span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-display font-bold text-surface-50 mb-3">
-            Browse Court{" "}
-            <span className="gradient-text">Judgments</span>
+            {t("judgmentsBrowseTitle").replace("Judgments", "")}{" "}
+            <span className="gradient-text">{t("navJudgments")}</span>
           </h1>
           <p className="text-surface-400 max-w-xl mx-auto">
-            Search through Indian court judgments from the Supreme Court, High
-            Courts, and District Courts. Filter by court type and legal category.
+            {t("judgmentsBrowseSubtitle")}
           </p>
         </div>
 
@@ -155,7 +155,7 @@ export default function JudgmentsBrowsePage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Search for judgments... (e.g. 'property dispute', 'tenant eviction')"
+              placeholder={t("searchJudgmentsPlaceholder")}
               className="input-glass text-base"
               id="judgment-search-input"
             />
@@ -166,7 +166,7 @@ export default function JudgmentsBrowsePage() {
             {/* Court Dropdown */}
             <div className="flex-1 min-w-[180px]">
               <label className="text-xs text-surface-500 uppercase tracking-wider mb-1 block">
-                Court
+                {t("court")}
               </label>
               <select
                 value={court}
@@ -185,7 +185,7 @@ export default function JudgmentsBrowsePage() {
             {/* Category Dropdown */}
             <div className="flex-1 min-w-[180px]">
               <label className="text-xs text-surface-500 uppercase tracking-wider mb-1 block">
-                Category
+                {t("category")}
               </label>
               <select
                 value={category}
@@ -212,14 +212,14 @@ export default function JudgmentsBrowsePage() {
             {isLoading ? (
               <>
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Searching…
+                {t("searching")}
               </>
             ) : (
               <>
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                 </svg>
-                Search Judgments
+                {t("searchJudgments")}
               </>
             )}
           </button>
@@ -258,10 +258,10 @@ export default function JudgmentsBrowsePage() {
             <div className="flex items-center justify-between mb-4">
               <span className="text-sm text-surface-500">
                 {totalFound > 0
-                  ? `Showing ${page * 10 + 1}–${Math.min((page + 1) * 10, totalFound)} of ${totalFound} judgments`
-                  : "No judgments found"}
+                  ? `${t("showing")} ${page * 10 + 1}–${Math.min((page + 1) * 10, totalFound)} ${t("of")} ${totalFound} ${t("judgments")}`
+                  : t("noJudgmentsFound")}
               </span>
-              {court || category ? (
+              {(court || category) ? (
                 <div className="flex items-center gap-2">
                   {court && (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20">
@@ -316,7 +316,7 @@ export default function JudgmentsBrowsePage() {
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
                         </svg>
-                        Read Full Judgment
+                        {t("readFullJudgment")}
                       </a>
                     </div>
                   </div>
@@ -326,10 +326,10 @@ export default function JudgmentsBrowsePage() {
               <div className="text-center py-16 animate-fade-in">
                 <div className="text-5xl mb-4">📄</div>
                 <p className="text-surface-400 text-lg">
-                  No judgments found for your search.
+                  {t("noJudgmentsFound")}
                 </p>
                 <p className="text-surface-500 text-sm mt-2">
-                  Try different keywords or remove filters.
+                  {t("tryDifferentKeywords")}
                 </p>
               </div>
             )}
@@ -343,7 +343,7 @@ export default function JudgmentsBrowsePage() {
                   className="btn-secondary text-sm disabled:opacity-30 disabled:cursor-not-allowed"
                   id="prev-page"
                 >
-                  ← Previous
+                  {t("prevPage")}
                 </button>
                 <div className="flex items-center gap-1">
                   {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
@@ -377,7 +377,7 @@ export default function JudgmentsBrowsePage() {
                   className="btn-secondary text-sm disabled:opacity-30 disabled:cursor-not-allowed"
                   id="next-page"
                 >
-                  Next →
+                  {t("nextPage")}
                 </button>
               </div>
             )}
@@ -389,11 +389,10 @@ export default function JudgmentsBrowsePage() {
           <div className="text-center py-20 animate-fade-in">
             <div className="text-6xl mb-6">⚖️</div>
             <h2 className="text-xl font-display font-semibold text-surface-200 mb-2">
-              Search Indian Court Judgments
+              {t("searchCourtJudgments")}
             </h2>
             <p className="text-surface-500 max-w-md mx-auto">
-              Enter a legal topic, case type, or keywords above to search
-              through thousands of court judgments from Indian courts.
+              {t("searchCourtJudgmentsSubtitle")}
             </p>
 
             {/* Quick Search Suggestions */}
@@ -426,7 +425,7 @@ export default function JudgmentsBrowsePage() {
       {/* ── Footer ───────────────────────────────────────────────────── */}
       <footer className="w-full px-6 py-6 text-center border-t border-surface-800/50">
         <p className="text-sm text-surface-500">
-          LexIndia — AI-powered legal access for every Indian citizen
+          {t("footerText")}
         </p>
       </footer>
     </div>

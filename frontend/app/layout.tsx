@@ -1,9 +1,11 @@
 /**
- * Root layout for LexIndia — applies global styles, fonts, metadata, and i18n provider.
+ * Root layout for LexIndia — applies global styles, fonts, metadata,
+ * and the TranslationProvider for cookie-based i18n.
  */
 
 import type { Metadata } from "next";
 import "./globals.css";
+import { TranslationProvider } from "@/lib/TranslationContext";
 
 export const metadata: Metadata = {
   title: "LexIndia — AI-Powered Indian Legal Access",
@@ -42,7 +44,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen">
-        {children}
+        <TranslationProvider>{children}</TranslationProvider>
       </body>
     </html>
   );

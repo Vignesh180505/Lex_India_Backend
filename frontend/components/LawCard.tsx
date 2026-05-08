@@ -6,7 +6,7 @@
  */
 
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useLanguage } from "@/lib/TranslationContext";
 import SeverityBadge from "./SeverityBadge";
 import FilingLink from "./FilingLink";
 import FilingModal from "./FilingModal";
@@ -18,7 +18,7 @@ interface LawCardProps {
 }
 
 export default function LawCard({ law, index }: LawCardProps) {
-  const { t } = useTranslation();
+  const { t } = useLanguage();
   const [showOriginal, setShowOriginal] = useState(false);
   const [showFilingModal, setShowFilingModal] = useState(false);
   const hasRelevance = law.relevance_score != null && !isNaN(law.relevance_score);
@@ -105,10 +105,10 @@ export default function LawCard({ law, index }: LawCardProps) {
           onClick={() => setShowFilingModal(true)}
           className="btn-primary text-sm flex items-center gap-2"
           id={`file-case-${law.section_id}`}
-          title="File a case under this law"
+          title={t("fileCase")}
         >
           <span className="text-lg">⚖️</span>
-          File a Case
+          {t("fileCase")}
         </button>
 
         {/* Draft Document Button — only for draftable acts */}
@@ -117,10 +117,10 @@ export default function LawCard({ law, index }: LawCardProps) {
             href={`/drafting?act=${encodeURIComponent(law.act_name)}&section=${encodeURIComponent(law.section_id)}`}
             className="btn-secondary text-sm flex items-center gap-2 hover:border-emerald-500/40 hover:text-emerald-300"
             id={`draft-doc-${law.section_id}`}
-            title="Generate a legal document based on this law"
+            title={t("draftDocument")}
           >
             <span className="text-lg">📝</span>
-            Draft Document
+            {t("draftDocument")}
           </a>
         )}
 

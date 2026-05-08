@@ -149,6 +149,7 @@ async def query_laws(
     issue: str,
     language: str,
     db: AsyncSession,
+    mode: str = "citizen",
 ) -> dict:
     """Execute the hybrid 3-tier RAG pipeline for a user's legal query.
 
@@ -180,8 +181,11 @@ async def query_laws(
         issue_en = issue
 
     # ── Step 3: Check Redis cache ────────────────────────────────────
-    cache_key = cache_service.make_cache_key(issue_en)
-    cached = await cache_service.get(cache_key)
+    cache_key = f"lexindia:query:{hashlib.md5(issue.encode()).hexdigest()}:{language}:{mode}"
+    try:
+        cached = await cache_service.get(cache_key)
+    except Exception:
+        cached = None
     if cached:
         logger.info(f"[{query_id}] Cache hit — returning cached response")
         cached["query_id"] = query_id
@@ -235,6 +239,9 @@ async def query_laws(
         logger.info(f"[{query_id}] Vector search returned {len(rows)} results")
     except Exception as e:
         logger.error(f"[{query_id}] Vector search failed: {e}")
+        # Explicitly rollback to avoid tainting the session for subsequent calls
+        if db.is_active:
+            await db.rollback()
         raise e
 
     # Calculate confidence from DB results
@@ -294,13 +301,18 @@ async def query_laws(
     logger.warning(f"[{query_id}] No good DB or web results (confidence: {db_confidence:.2f}) — using GPT-4o to generate answer")
     
     try:
-        llm_answer = await general_legal_answer(issue_en, issue)
+        llm_answer = await general_legal_answer(issue_en, issue, language)
         if not llm_answer or str(llm_answer).strip().lower() in {"none", "null", ""}:
-            llm_answer = (
-                "⚠️ AI LEGAL SUMMARY UNAVAILABLE\n\n"
-                "No database or external-source match was found for this query, and the LLM response was empty. "
-                "Please rephrase with more detail (who, what, where, when) or try a related legal keyword."
-            )
+            if language == "ta":
+                llm_answer = "⚠️ AI சட்ட சுருக்கம் கிடைக்கவில்லை\n\nஇந்த வினவலுக்கு தரவுத்தளத்தில் எந்த முடிவும் கிடைக்கவில்லை."
+            elif language == "hi":
+                llm_answer = "⚠️ AI कानूनी सारांश उपलब्ध नहीं है\n\nइस क्वेरी के लिए डेटाबेस में कोई परिणाम नहीं मिला।"
+            else:
+                llm_answer = (
+                    "⚠️ AI LEGAL SUMMARY UNAVAILABLE\n\n"
+                    "No database or external-source match was found for this query, and the LLM response was empty. "
+                    "Please rephrase with more detail (who, what, where, when) or try a related legal keyword."
+                )
         
         response = {
             "query_id": query_id,
@@ -347,8 +359,8 @@ async def _process_tier1_results(
     context = _build_rag_context(rows, issue_en)
 
     try:
-        logger.info(f"[{query_id}] Calling GPT-4o for summary...")
-        gpt_response = await generate_query_response(context)
+        logger.info(f"[{query_id}] Calling GPT-4o for summary in {language}...")
+        gpt_response = await generate_query_response(context, language)
         logger.info(f"[{query_id}] GPT-4o response received")
     except Exception as e:
         logger.error(f"[{query_id}] GPT-4o call failed: {e}")
@@ -408,22 +420,58 @@ async def _process_tier1_results(
             "relevance_score": round(float(law.get("relevance_score", db_row.score)), 2),
         })
 
+    # If language is not English, batch translate act names, titles, and punishments
+    if language != "en" and law_results:
+        try:
+            lang_name = "Tamil" if language == "ta" else "Hindi"
+            from app.services.generate_service import _call_llm_with_fallback
+            
+            translation_prompt = f"""Translate these legal metadata fields into {lang_name}.
+Return ONLY a valid JSON array of objects with translated 'act_name', 'section_title', and 'punishment'.
+Keep the exact same array order. Do not translate English legal codes like 'IPC' or 'CrPC' - keep them as is or transliterate."""
+            
+            payload = [
+                {"act_name": l["act_name"], "section_title": l["section_title"], "punishment": l["punishment"]}
+                for l in law_results
+            ]
+            
+            translated_data = await _call_llm_with_fallback(
+                translation_prompt,
+                json.dumps(payload),
+                f"Batch translate law metadata to {lang_name}"
+            )
+            
+            if isinstance(translated_data, list) and len(translated_data) == len(law_results):
+                for i, translated in enumerate(translated_data):
+                    law_results[i]["act_name"] = translated.get("act_name", law_results[i]["act_name"])
+                    law_results[i]["section_title"] = translated.get("section_title", law_results[i]["section_title"])
+                    law_results[i]["punishment"] = translated.get("punishment", law_results[i]["punishment"])
+        except Exception as e:
+            logger.error(f"Failed to translate law metadata: {e}")
+
     law_results.sort(key=lambda x: x["relevance_score"], reverse=True)
     response_ms = int((time.perf_counter() - start_time) * 1000)
 
     response = {
         "query_id": query_id,
         "detected_language": detected_lang,
-        "ai_summary": (
-            f"{gpt_response.get('ai_summary', '')}\n\n"
-            f"⚠️ LEGAL DISCLAIMER: This information is for general reference only and is NOT legal advice. "
-            f"The simplified explanations may not capture all legal nuances. "
-            f"Always consult a qualified legal professional for advice specific to your situation."
-        ),
+        "ai_summary": gpt_response.get('ai_summary', '') if gpt_response else '',
         "laws": law_results,
         "response_ms": response_ms,
         "source": "Database Search (Tier 1)",
     }
+
+    # Add translated disclaimer
+    if language == "ta":
+        response["ai_summary"] += "\n\n⚠️ சட்ட பொறுப்புத்துறப்பு: இந்தத் தகவல் பொதுவான குறிப்புக்காக மட்டுமே, இது சட்ட ஆலோசனை அல்ல. தயவுசெய்து தகுதியான வழக்கறிஞரை அணுகவும்."
+    elif language == "hi":
+        response["ai_summary"] += "\n\n⚠️ कानूनी अस्वीकरण: यह जानकारी केवल सामान्य संदर्भ के लिए है और कानूनी सलाह नहीं है। कृपया किसी योग्य वकील से सलाह लें।"
+    else:
+        response["ai_summary"] += (
+            f"\n\n⚠️ LEGAL DISCLAIMER: This information is for general reference only and is NOT legal advice. "
+            f"The simplified explanations may not capture all legal nuances. "
+            f"Always consult a qualified legal professional for advice specific to your situation."
+        )
 
     # Cache and log
     await cache_service.set(cache_key, response)
@@ -619,23 +667,9 @@ async def _log_query(
 ) -> None:
     """Log the query to the query_logs table (fire-and-forget)."""
     try:
-            if db is None:
-                async with async_session_factory() as session:
-                    await session.execute(
-                        text("""
-                            INSERT INTO query_logs (query_text, language, results_count, response_ms)
-                            VALUES (:query_text, :language, :results_count, :response_ms)
-                        """),
-                        {
-                            "query_text": query_text,
-                            "language": language,
-                            "results_count": results_count,
-                            "response_ms": response_ms,
-                        },
-                    )
-                    await session.commit()
-            else:
-                await db.execute(
+        if db is None:
+            async with async_session_factory() as session:
+                await session.execute(
                     text("""
                         INSERT INTO query_logs (query_text, language, results_count, response_ms)
                         VALUES (:query_text, :language, :results_count, :response_ms)
@@ -647,6 +681,21 @@ async def _log_query(
                         "response_ms": response_ms,
                     },
                 )
-                await db.commit()
+                await session.commit()
+        else:
+            # Use the provided session but don't commit it here — let the owner commit
+            await db.execute(
+                text("""
+                    INSERT INTO query_logs (query_text, language, results_count, response_ms)
+                    VALUES (:query_text, :language, :results_count, :response_ms)
+                """),
+                {
+                    "query_text": query_text,
+                    "language": language,
+                    "results_count": results_count,
+                    "response_ms": response_ms,
+                },
+            )
+            # await db.commit() <- REMOVED: Never commit a shared session in a fire-and-forget task
     except Exception as e:
         logger.warning(f"Failed to log query: {e}")

@@ -58,18 +58,23 @@ async def handle_query(
             issue=request.issue,
             language=request.language,
             db=db,
+            mode=request.mode,
         )
         logger.info("RAG pipeline successful")
         return QueryResponse(**result)
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Query handler exception: {e}", exc_info=True)
+        logger.error(f"Critical error in handle_query: {str(e)}", exc_info=True)
+        # Attempt to rollback to prevent session corruption
         try:
-            await db.rollback()
-        except Exception:
-            pass
+            if db.is_active:
+                await db.rollback()
+        except Exception as rb_err:
+            logger.warning(f"Secondary error during rollback: {rb_err}")
+            
         raise HTTPException(
             status_code=503,
-            detail=f"Embedding service unavailable: {str(e)}. Run setup/generate_embeddings.py first.",
+            detail="The legal search engine encountered a temporary database error. Our team has been notified.",
         )
+

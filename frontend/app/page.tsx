@@ -5,10 +5,9 @@
  * Features: animated hero, full-width search textarea, example prompts, category shortcuts.
  */
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslation } from "react-i18next";
-import "@/lib/i18n";
+import { useLanguage } from "@/lib/TranslationContext";
 
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import ModeToggle from "@/components/ModeToggle";
@@ -23,32 +22,26 @@ const CATEGORIES = [
 ];
 
 export default function HomePage() {
-  const { t, i18n } = useTranslation();
+  const { t, langCode } = useLanguage();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isHydrated, setIsHydrated] = useState(false);
   const mode = useMode();
-
-  useEffect(() => {
-    setIsHydrated(true);
-  }, []);
 
   const handleQuery = async (query: string) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const lang = (i18n.language || "en").substring(0, 2);
-      const result: QueryResponse = await queryLaws(query, lang, mode);
+      const result: QueryResponse = await queryLaws(query, langCode, mode);
 
       // Store result in sessionStorage for the results page
       sessionStorage.setItem("lexindia-results", JSON.stringify(result));
       sessionStorage.setItem("lexindia-query", query);
       router.push("/results");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Query failed:", err);
-      setError(t("errorGeneric"));
+      setError(t("error"));
     } finally {
       setIsLoading(false);
     }
@@ -61,6 +54,15 @@ export default function HomePage() {
       consumer: "I bought a defective product online and the seller refuses to refund my money",
     };
     handleQuery(categoryQueries[category] || "");
+  };
+
+  const getCategoryLabel = (id: string): string => {
+    const map: Record<string, "categoryCriminal" | "categoryCivil" | "categoryConsumer"> = {
+      criminal: "categoryCriminal",
+      civil: "categoryCivil",
+      consumer: "categoryConsumer",
+    };
+    return t(map[id] || "categoryCriminal");
   };
 
   return (
@@ -89,14 +91,14 @@ export default function HomePage() {
             className="text-sm text-surface-400 hover:text-surface-200 transition-colors hidden sm:block"
             id="nav-drafting"
           >
-            📝 Legal Tools
+            📝 {t("navDraft")}
           </a>
           <a
             href="/judgments/browse"
             className="text-sm text-surface-400 hover:text-surface-200 transition-colors hidden sm:block"
             id="nav-judgments"
           >
-            ⚖️ Judgments
+            ⚖️ {t("navJudgments")}
           </a>
           <LanguageSwitcher />
         </div>
@@ -112,19 +114,19 @@ export default function HomePage() {
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand-500/10 border border-brand-500/20 mb-6">
             <span className="w-2 h-2 rounded-full bg-brand-400 animate-pulse-soft" />
             <span className="text-sm text-brand-300 font-medium">
-              AI-Powered Legal Access
+              {t("aiPoweredLegalAccess")}
             </span>
           </div>
 
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-display font-bold text-surface-50 mb-5 text-balance leading-[1.1]">
-            Know Your{" "}
-            <span className="gradient-text">Rights</span>
+            {t("knowYourRights")}{" "}
+            <span className="gradient-text">&nbsp;</span>
             <br />
-            Under Indian Law
+            {t("underIndianLaw")}
           </h1>
 
           <p className="text-lg sm:text-xl text-surface-400 max-w-2xl mx-auto text-balance leading-relaxed">
-            {t("tagline")}. {t("searchPlaceholder").replace("...", ".")}
+            {t("tagline")}
           </p>
         </div>
 
@@ -186,7 +188,7 @@ export default function HomePage() {
             >
               <span className="text-2xl">{cat.icon}</span>
               <span className="font-medium text-surface-200">
-                {t(`categories.${cat.id}`)}
+                {getCategoryLabel(cat.id)}
               </span>
             </button>
           ))}
@@ -196,7 +198,7 @@ export default function HomePage() {
       {/* ── Footer ───────────────────────────────────────────────────── */}
       <footer className="w-full px-6 py-6 text-center border-t border-surface-800/50">
         <p className="text-sm text-surface-500">
-          LexIndia — AI-powered legal access for every Indian citizen
+          {t("footerText")}
         </p>
       </footer>
     </div>

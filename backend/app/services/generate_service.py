@@ -11,7 +11,8 @@ import asyncio
 from typing import Optional, List, Dict, Any
 
 from openai import AsyncOpenAI
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from app.config import settings
 
@@ -20,7 +21,7 @@ logger = logging.getLogger("lexindia.services.generate")
 # ── LLM Clients ───────────────────────────────────────────────────────────
 _openai_client: Optional[AsyncOpenAI] = None
 _grok_client: Optional[AsyncOpenAI] = None
-_gemini_model: Optional[genai.GenerativeModel] = None
+_gemini_client: Optional[genai.Client] = None
 
 def get_openai_client() -> AsyncOpenAI:
     global _openai_client
@@ -39,12 +40,11 @@ def get_grok_client() -> AsyncOpenAI:
         )
     return _grok_client
 
-def get_gemini_model() -> genai.GenerativeModel:
-    global _gemini_model
-    if _gemini_model is None:
-        genai.configure(api_key=settings.GEMINI_API_KEY.strip() if settings.GEMINI_API_KEY else None)
-        _gemini_model = genai.GenerativeModel("gemini-2.5-flash")
-    return _gemini_model
+def get_gemini_client() -> genai.Client:
+    global _gemini_client
+    if _gemini_client is None:
+        _gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY.strip() if settings.GEMINI_API_KEY else None)
+    return _gemini_client
 
 # ── System Prompts ────────────────────────────────────────────────────────
 SIMPLIFY_SYSTEM_PROMPT = """You are a legal simplification assistant for Indian law.
@@ -120,12 +120,14 @@ async def _call_grok(system_prompt: str, user_message: str, response_format: str
     return response.choices[0].message.content
 
 async def _call_gemini(system_prompt: str, user_message: str, response_mime: str = "application/json") -> str:
-    model = get_gemini_model()
+    client = get_gemini_client()
     # Combine system prompt and user message for Gemini
     full_prompt = f"{system_prompt}\n\nUSER INPUT:\n{user_message}"
-    response = await model.generate_content_async(
-        full_prompt,
-        generation_config=genai.types.GenerationConfig(
+    
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=full_prompt,
+        config=types.GenerateContentConfig(
             response_mime_type=response_mime,
             max_output_tokens=2000 if response_mime == "text/plain" else 800,
             temperature=0.2,
@@ -135,7 +137,7 @@ async def _call_gemini(system_prompt: str, user_message: str, response_mime: str
 
 # ── Fallback Orchestrator ──────────────────────────────────────────────────
 
-async def _call_llm_with_fallback(system_prompt: str, user_message: str, task_name: str) -> Optional[dict]:
+async def _call_llm_with_fallback(system_prompt: str, user_message: str, task_name: str, response_format: str = "json_object") -> Any:
     """Try providers in order until one succeeds or all fail."""
     for provider in settings.llm_providers:
         try:
@@ -144,21 +146,32 @@ async def _call_llm_with_fallback(system_prompt: str, user_message: str, task_na
             if provider == "openai":
                 if not settings.OPENAI_API_KEY: 
                     continue
-                raw_content = await _call_openai(system_prompt, user_message)
+                raw_content = await _call_openai(system_prompt, user_message, response_format=response_format)
             
             elif provider == "gemini":
                 if not settings.GEMINI_API_KEY: 
                     continue
-                raw_content = await _call_gemini(system_prompt, user_message)
+                raw_content = await _call_gemini(system_prompt, user_message, response_mime="application/json" if response_format == "json_object" else "text/plain")
             
             elif provider == "grok":
                 if not settings.GROK_API_KEY: 
                     continue
-                raw_content = await _call_grok(system_prompt, user_message)
+                raw_content = await _call_grok(system_prompt, user_message, response_format=response_format)
             
             else:
                 logger.warning(f"Unknown LLM provider: {provider}")
                 continue
+
+            if response_format == "text":
+                logger.info(f"Successfully completed {task_name} using {provider.upper()} (text)")
+                return raw_content
+
+            # Clean markdown code blocks for JSON parsing
+            raw_content = raw_content.strip()
+            if raw_content.startswith("```"):
+                import re
+                raw_content = re.sub(r"^```(?:json)?\n", "", raw_content)
+                raw_content = re.sub(r"\n```$", "", raw_content).strip()
 
             parsed = json.loads(raw_content)
             logger.info(f"Successfully completed {task_name} using {provider.upper()}")
@@ -207,10 +220,20 @@ async def simplify_section(
 
 async def generate_query_response(
     context: str,
+    language: str = "en",
 ) -> Optional[dict]:
     """Generate AI summary and rankings using the fallback pipeline."""
+    lang_name = "English"
+    if language == "ta":
+        lang_name = "Tamil"
+    elif language == "hi":
+        lang_name = "Hindi"
+
+    # Append strict language instruction
+    prompt = QUERY_SYSTEM_PROMPT + f"\n\nCRITICAL RULE: The ai_summary MUST be written in {lang_name}."
+
     parsed = await _call_llm_with_fallback(
-        QUERY_SYSTEM_PROMPT, 
+        prompt, 
         context, 
         "Generate Query Response"
     )
@@ -222,17 +245,23 @@ async def generate_query_response(
             
     return parsed
 
-async def general_legal_answer(issue_en: str, issue_original: str) -> str:
+async def general_legal_answer(issue_en: str, issue_original: str, language: str = "en") -> str:
     """Generate general legal guidance when no specific laws found (LLM Tier 3 Fallback).
     
     Args:
         issue_en: Issue in English
         issue_original: Original issue as user typed it
+        language: Language code ('en', 'ta', 'hi')
         
     Returns:
         Legal guidance text with disclaimers
     """
-    system_prompt = """You are a legal information assistant for Indian law. 
+    lang_name = "English"
+    if language == "ta":
+        lang_name = "Tamil"
+    elif language == "hi":
+        lang_name = "Hindi"
+    system_prompt = f"""You are a legal information assistant for Indian law. 
 A user has asked a legal question that doesn't have a direct match in our law database.
 
 Your task:
@@ -242,7 +271,9 @@ Your task:
 4. Suggest they consult a qualified lawyer
 5. Keep response under 500 words
 
-Be helpful but cautious. Never give specific legal advice."""
+Be helpful but cautious. Never give specific legal advice.
+
+CRITICAL RULE: The ENTIRE response MUST be written in {lang_name}. Do not use English unless citing a specific English term."""
 
     user_message = f"""User's Legal Question: {issue_original}
 

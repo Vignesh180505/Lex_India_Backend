@@ -6,7 +6,7 @@
  * and download as PDF.
  */
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import "@/lib/i18n";
 
@@ -24,7 +24,7 @@ type DocumentType =
 
 type Step = "select" | "form" | "preview";
 
-export default function DraftingPage() {
+function DraftingContent() {
   const searchParams = useSearchParams();
   const [step, setStep] = useState<Step>("select");
   const [selectedType, setSelectedType] = useState<DocumentType | null>(null);
@@ -159,6 +159,14 @@ export default function DraftingPage() {
         </p>
       </footer>
     </div>
+  );
+}
+
+export default function DraftingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-surface-400">Loading...</div>}>
+      <DraftingContent />
+    </Suspense>
   );
 }
 
