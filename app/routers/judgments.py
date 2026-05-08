@@ -552,7 +552,10 @@ async def analyze_outcomes(
             if r:
                 outcomes.append(r)
         except Exception as e:
-            logger.error(f"Outcome analysis exception for doc {did}: {r}")
+            logger.error(f"Outcome analysis exception for doc {did}: {e}")
+            # CRITICAL: Roll back the session so it can be used for the next doc in the loop
+            if db.is_active:
+                await db.rollback()
 
     # Aggregate results
     total = len(outcomes)

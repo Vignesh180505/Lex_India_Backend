@@ -232,6 +232,9 @@ async def _upsert_laws(sections: List[Dict]) -> int:
                 upserted += 1
             except Exception as e:
                 logger.error(f"Error upserting {section['section_id']}: {e}")
+                # Roll back the session so the loop can continue with the next section
+                if session.is_active:
+                    await session.rollback()
 
         await session.commit()
 

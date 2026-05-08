@@ -240,7 +240,8 @@ async def query_laws(
     except Exception as e:
         logger.error(f"[{query_id}] Vector search failed: {e}")
         # Explicitly rollback to avoid tainting the session for subsequent calls
-        await db.rollback()
+        if db.is_active:
+            await db.rollback()
         raise e
 
     # Calculate confidence from DB results
@@ -666,23 +667,9 @@ async def _log_query(
 ) -> None:
     """Log the query to the query_logs table (fire-and-forget)."""
     try:
-            if db is None:
-                async with async_session_factory() as session:
-                    await session.execute(
-                        text("""
-                            INSERT INTO query_logs (query_text, language, results_count, response_ms)
-                            VALUES (:query_text, :language, :results_count, :response_ms)
-                        """),
-                        {
-                            "query_text": query_text,
-                            "language": language,
-                            "results_count": results_count,
-                            "response_ms": response_ms,
-                        },
-                    )
-                    await session.commit()
-            else:
-                await db.execute(
+        if db is None:
+            async with async_session_factory() as session:
+                await session.execute(
                     text("""
                         INSERT INTO query_logs (query_text, language, results_count, response_ms)
                         VALUES (:query_text, :language, :results_count, :response_ms)
@@ -694,6 +681,21 @@ async def _log_query(
                         "response_ms": response_ms,
                     },
                 )
-                await db.commit()
+                await session.commit()
+        else:
+            # Use the provided session but don't commit it here — let the owner commit
+            await db.execute(
+                text("""
+                    INSERT INTO query_logs (query_text, language, results_count, response_ms)
+                    VALUES (:query_text, :language, :results_count, :response_ms)
+                """),
+                {
+                    "query_text": query_text,
+                    "language": language,
+                    "results_count": results_count,
+                    "response_ms": response_ms,
+                },
+            )
+            # await db.commit() <- REMOVED: Never commit a shared session in a fire-and-forget task
     except Exception as e:
         logger.warning(f"Failed to log query: {e}")

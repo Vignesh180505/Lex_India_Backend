@@ -11,7 +11,8 @@ import asyncio
 from typing import Optional, List, Dict, Any
 
 from openai import AsyncOpenAI
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from app.config import settings
 
@@ -20,7 +21,7 @@ logger = logging.getLogger("lexindia.services.generate")
 # ── LLM Clients ───────────────────────────────────────────────────────────
 _openai_client: Optional[AsyncOpenAI] = None
 _grok_client: Optional[AsyncOpenAI] = None
-_gemini_model: Optional[genai.GenerativeModel] = None
+_gemini_client: Optional[genai.Client] = None
 
 def get_openai_client() -> AsyncOpenAI:
     global _openai_client
@@ -39,12 +40,11 @@ def get_grok_client() -> AsyncOpenAI:
         )
     return _grok_client
 
-def get_gemini_model() -> genai.GenerativeModel:
-    global _gemini_model
-    if _gemini_model is None:
-        genai.configure(api_key=settings.GEMINI_API_KEY.strip() if settings.GEMINI_API_KEY else None)
-        _gemini_model = genai.GenerativeModel("gemini-2.5-flash")
-    return _gemini_model
+def get_gemini_client() -> genai.Client:
+    global _gemini_client
+    if _gemini_client is None:
+        _gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY.strip() if settings.GEMINI_API_KEY else None)
+    return _gemini_client
 
 # ── System Prompts ────────────────────────────────────────────────────────
 SIMPLIFY_SYSTEM_PROMPT = """You are a legal simplification assistant for Indian law.
@@ -120,12 +120,14 @@ async def _call_grok(system_prompt: str, user_message: str, response_format: str
     return response.choices[0].message.content
 
 async def _call_gemini(system_prompt: str, user_message: str, response_mime: str = "application/json") -> str:
-    model = get_gemini_model()
+    client = get_gemini_client()
     # Combine system prompt and user message for Gemini
     full_prompt = f"{system_prompt}\n\nUSER INPUT:\n{user_message}"
-    response = await model.generate_content_async(
-        full_prompt,
-        generation_config=genai.types.GenerationConfig(
+    
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=full_prompt,
+        config=types.GenerateContentConfig(
             response_mime_type=response_mime,
             max_output_tokens=2000 if response_mime == "text/plain" else 800,
             temperature=0.2,
