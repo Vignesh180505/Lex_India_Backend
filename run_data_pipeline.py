@@ -20,5 +20,11 @@ if __name__ == "__main__":
         result = run_full_pipeline(act_filter=["IPC", "CPA"], limit_per_act=limit)
         print("\nScraping Pipeline Completed successfully!")
         print(f"Stats: {result}")
+        
+        # Seed environmental laws
+        from seed_environment_laws import seed_environmental_laws
+        print("\nSeeding environmental laws...")
+        asyncio.run(seed_environmental_laws())
+        
     except Exception as e:
         print(f"Script failed: {e}")

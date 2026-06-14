@@ -3,32 +3,49 @@
 This is the EMBEDDING model — completely separate from GPT-4o (Call 1).
 - Input: plain text string (always simplified_en, never section_text)
 - Output: list of 384 floats (a mathematical vector, NOT readable text)
-- Model: sentence-transformers/all-MiniLM-L6-v2 (runs locally, free, no API key)
+- Model: sentence-transformers/all-MiniLM-L6-v2 via FastEmbed (ONNX Runtime)
+
+FastEmbed uses ONNX Runtime instead of PyTorch, reducing RAM from ~500MB to ~150MB.
+The model produces IDENTICAL 384-dim vectors, so existing database embeddings remain
+fully compatible — no re-embedding needed.
 
 The model is loaded ONCE at startup and reused for all requests.
 Must be the same model used in setup/generate_embeddings.py for compatible vectors.
 """
 
 import logging
+from typing import Optional
 
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 
 from app.config import settings
 
 logger = logging.getLogger("lexindia.embed")
 
 # ── Singleton Model ───────────────────────────────────────────────────────
-_model: SentenceTransformer | None = None
+_model: Optional[TextEmbedding] = None
+
+# FastEmbed uses its own model naming convention
+# Map from sentence-transformers name to fastembed name
+_FASTEMBED_MODEL_MAP = {
+    "sentence-transformers/all-MiniLM-L6-v2": "sentence-transformers/all-MiniLM-L6-v2",
+    "all-MiniLM-L6-v2": "sentence-transformers/all-MiniLM-L6-v2",
+}
 
 
-def get_model() -> SentenceTransformer:
+def get_model() -> TextEmbedding:
     """Load the embedding model (singleton — only loads once)."""
     global _model
     if _model is None:
-        logger.info("Loading all-MiniLM-L6-v2 model...")
-        _model = SentenceTransformer(settings.EMBEDDING_MODEL)
+        model_name = _FASTEMBED_MODEL_MAP.get(
+            settings.EMBEDDING_MODEL, settings.EMBEDDING_MODEL
+        )
+        logger.info(f"Loading embedding model via FastEmbed (ONNX): {model_name}")
+        _model = TextEmbedding(model_name=model_name)
+        # Quick test to verify dimension
+        test_vec = list(_model.embed(["test"]))[0]
         logger.info(
-            f"Model loaded. Test embedding dim: {len(_model.encode('test').tolist())}"
+            f"Model loaded. Test embedding dim: {len(test_vec)}"
         )
     return _model
 
@@ -46,7 +63,8 @@ def embed(text: str) -> list[float]:
         raise ValueError("Cannot embed empty text")
 
     model = get_model()
-    vector = model.encode(text, normalize_embeddings=True)
+    # fastembed.embed() returns a generator of numpy arrays
+    vector = list(model.embed([text]))[0]
     return vector.tolist()
 
 
@@ -63,5 +81,6 @@ def embed_batch(texts: list[str]) -> list[list[float]]:
         return []
 
     model = get_model()
-    vectors = model.encode(texts, normalize_embeddings=True, batch_size=64)
+    # fastembed handles batching internally
+    vectors = list(model.embed(texts, batch_size=64))
     return [v.tolist() for v in vectors]

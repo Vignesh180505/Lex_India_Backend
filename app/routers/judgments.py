@@ -573,10 +573,15 @@ async def analyze_outcomes(
     pet_label = max(set(pet_types), key=pet_types.count) if pet_types else "petitioners"
     resp_label = max(set(resp_types), key=resp_types.count) if resp_types else "respondents"
 
-    if win_pct >= 60:
+    unclear_pct = (unclear / total * 100) if total > 0 else 0
+    resp_win_pct = round((resp_wins / total) * 100, 1) if total > 0 else 0.0
+
+    if unclear_pct >= 60:
+        favour_label = f"Insufficient data — {unclear} of {total} cases had unclear outcomes"
+    elif win_pct >= 60:
         favour_label = f"Courts favour {pet_label} in {win_pct}% of similar cases"
-    elif (100 - win_pct - (partial / total * 100 if total > 0 else 0)) >= 60:
-        favour_label = f"Courts favour {resp_label} in {round(resp_wins / total * 100, 1) if total > 0 else 0}% of similar cases"
+    elif resp_win_pct >= 60:
+        favour_label = f"Courts favour {resp_label} in {resp_win_pct}% of similar cases"
     else:
         favour_label = f"Mixed outcomes — no clear trend ({pet_wins} for {pet_label}, {resp_wins} for {resp_label})"
 
