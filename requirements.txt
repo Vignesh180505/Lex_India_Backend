@@ -36,4 +36,4 @@ numpy
 
 # PDF Generation
 reportlab
-google-generativeai
+google-genai
