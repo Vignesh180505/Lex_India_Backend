@@ -6,9 +6,10 @@ These schemas enforce strict typing at the API boundary:
 - LawResult represents a single matched law within the response.
 """
 
-from pydantic import BaseModel, Field
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, field_validator, computed_field
 from typing import List, Optional, Literal, Union
+import re
+import html
 
 DRAFTABLE_ACT_CODES = {"CPA", "IPC", "RTI", "MVA", "ICA"}
 
@@ -32,6 +33,47 @@ class QueryRequest(BaseModel):
         description="Search mode: citizen or lawyer",
     )
 
+    @field_validator("issue", mode="before")
+    @classmethod
+    def sanitise_issue(cls, v: str) -> str:
+        """Sanitise user input before it reaches any LLM or database query.
+
+        1. Decode HTML entities (e.g. &lt; -> <)
+        2. Strip all HTML/XML tags
+        3. Collapse excessive whitespace to single spaces
+        4. Block common prompt-injection patterns that attempt to
+           override system instructions or exfiltrate data.
+        """
+        if not isinstance(v, str):
+            return v
+
+        # Decode HTML entities then strip tags
+        v = html.unescape(v)
+        v = re.sub(r"<[^>]+>", " ", v)
+
+        # Collapse whitespace
+        v = re.sub(r"[\r\n\t]+", " ", v)
+        v = re.sub(r" {2,}", " ", v).strip()
+
+        # Block prompt-injection patterns
+        # These phrases attempt to override the system prompt or role
+        _INJECTION_PATTERNS = re.compile(
+            r"(ignore (all |the )?(previous|above|prior) instructions"
+            r"|you are now"
+            r"|act as (a |an )?"
+            r"|system:\s*you"
+            r"|<\|im_start\|>"
+            r"|<\|im_end\|>)",
+            re.IGNORECASE,
+        )
+        if _INJECTION_PATTERNS.search(v):
+            raise ValueError(
+                "Your query contains patterns that are not allowed. "
+                "Please describe your legal issue in plain language."
+            )
+
+        return v
+
 
 class LawResult(BaseModel):
     """A single law section returned in the query response."""
@@ -39,11 +81,11 @@ class LawResult(BaseModel):
     section_id: str = Field(..., description="Unique section identifier, e.g. CPA-72.")
     act_name: str = Field(..., description="Full name of the Act.")
     act_code: Optional[str] = None
-    section_number: str = Field(..., description="Section number within the Act.")
-    section_title: str = Field(..., description="Title of the section.")
-    original_text: str = Field(..., description="Verbatim original legal text.")
+    section_number: str = Field(default="", description="Section number within the Act.")
+    section_title: str = Field(default="", description="Title of the section.")
+    original_text: str = Field(default="", description="Verbatim original legal text.")
     simplified: str = Field(
-        ..., description="Simplified explanation in the requested language."
+        default="", description="Simplified explanation in the requested language."
     )
     severity: str = Field(
         ...,

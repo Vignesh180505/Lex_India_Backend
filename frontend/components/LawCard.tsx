@@ -9,24 +9,28 @@ import { useState } from "react";
 import { useLanguage } from "@/lib/TranslationContext";
 import SeverityBadge from "./SeverityBadge";
 import FilingLink from "./FilingLink";
-import FilingModal from "./FilingModal";
 import type { LawResult } from "@/lib/api";
 
 interface LawCardProps {
   law: LawResult;
   index: number;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
+  onFileCase?: (actCode: string) => void;
 }
 
-export default function LawCard({ law, index }: LawCardProps) {
+export default function LawCard({ law, index, isExpanded, onToggleExpand, onFileCase }: LawCardProps) {
   const { t } = useLanguage();
-  const [showOriginal, setShowOriginal] = useState(false);
-  const [showFilingModal, setShowFilingModal] = useState(false);
+  const [localShowOriginal, setLocalShowOriginal] = useState(false);
+
+  const showOriginal = isExpanded !== undefined ? isExpanded : localShowOriginal;
+  const toggleOriginal = onToggleExpand || (() => setLocalShowOriginal(!localShowOriginal));
   const hasRelevance = law.relevance_score != null && !isNaN(law.relevance_score);
   const relevancePercent = hasRelevance ? Math.round((law.relevance_score ?? 0) * 100) : 0;
 
   return (
     <div
-      className="glass-card p-6 animate-fade-up"
+      className="glass-card p-6 animate-fade-up relative overflow-hidden h-auto"
       style={{ animationDelay: `${index * 100}ms` }}
       id={`law-card-${law.section_id}`}
     >
@@ -92,7 +96,7 @@ export default function LawCard({ law, index }: LawCardProps) {
       <div className="flex flex-wrap items-center gap-3">
         {/* Toggle Original Text */}
         <button
-          onClick={() => setShowOriginal(!showOriginal)}
+          onClick={toggleOriginal}
           className="btn-secondary text-sm"
           id={`toggle-original-${law.section_id}`}
         >
@@ -102,7 +106,11 @@ export default function LawCard({ law, index }: LawCardProps) {
 
         {/* File Case Button */}
         <button
-          onClick={() => setShowFilingModal(true)}
+          onClick={() => {
+            if (onFileCase) {
+              onFileCase(law.section_id || law.act_name || "DEFAULT");
+            }
+          }}
           className="btn-primary text-sm flex items-center gap-2"
           id={`file-case-${law.section_id}`}
           title={t("fileCase")}
@@ -125,15 +133,11 @@ export default function LawCard({ law, index }: LawCardProps) {
         )}
 
         {/* Filing Link */}
-        <FilingLink url={law.filing_link ?? null} actName={law.act_name} />
+        <FilingLink
+          url={law.filing_link ?? null}
+          actName={law.act_name}
+        />
       </div>
-
-      {/* Filing Modal — NEW */}
-      <FilingModal
-        actCode={law.section_id || law.act_name || "DEFAULT"}
-        isOpen={showFilingModal}
-        onClose={() => setShowFilingModal(false)}
-      />
 
       {/* Collapsible Original Text */}
       {showOriginal && (

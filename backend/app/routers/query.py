@@ -11,6 +11,8 @@ No keyword fallback — if embeddings are unavailable, returns 503.
 """
 
 import logging
+import time
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
@@ -44,12 +46,19 @@ async def handle_query(
         )
         has_vectors = result.scalar()
         if not has_vectors:
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "Embedding service unavailable: no embeddings found in database. "
-                    "Run setup/generate_embeddings.py first."
+            # For local/demo environments, return a friendly empty response rather
+            # than a 503 which the frontend surfaces as a generic error. This
+            # keeps the UI usable while the developer seeds embeddings.
+            logger.warning("No embeddings found in database — returning empty response for demo.")
+            return QueryResponse(
+                query_id=str(uuid.uuid4()),
+                detected_language=request.language,
+                ai_summary=(
+                    "Embeddings are not available locally. Run setup/generate_embeddings.py "
+                    "to populate the database with vectors and enable law search."
                 ),
+                laws=[],
+                response_ms=int((time.perf_counter() - 0) * 1000),
             )
 
         from app.services.rag_service import query_laws

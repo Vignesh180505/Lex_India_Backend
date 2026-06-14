@@ -94,7 +94,7 @@ async def _call_openai(system_prompt: str, user_message: str, response_format: s
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
         ],
-        "max_tokens": 2000 if response_format == "text" else 800,
+        "max_tokens": 3000,
         "temperature": 0.2,
     }
     # Only set response_format for JSON — omit for plain text
@@ -111,7 +111,7 @@ async def _call_grok(system_prompt: str, user_message: str, response_format: str
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
         ],
-        "max_tokens": 2000 if response_format == "text" else 800,
+        "max_tokens": 3000,
         "temperature": 0.2,
     }
     if response_format == "json_object":
@@ -129,7 +129,7 @@ async def _call_gemini(system_prompt: str, user_message: str, response_mime: str
         contents=full_prompt,
         config=types.GenerateContentConfig(
             response_mime_type=response_mime,
-            max_output_tokens=2000 if response_mime == "text/plain" else 800,
+            max_output_tokens=3000,
             temperature=0.2,
         )
     )
@@ -178,6 +178,7 @@ async def _call_llm_with_fallback(system_prompt: str, user_message: str, task_na
             return parsed
 
         except Exception as e:
+            print(f"{provider.upper()} failed: {type(e).__name__}: {str(e)}")
             logger.error(f"{provider.upper()} failed for {task_name}: {e}")
             continue
             
@@ -284,7 +285,8 @@ but make clear this is NOT legal advice and they should consult a lawyer."""
         parsed = await _call_llm_with_fallback(
             system_prompt,
             user_message,
-            "General Legal Answer"
+            "General Legal Answer",
+            response_format="text"
         )
         
         if isinstance(parsed, dict):

@@ -15,6 +15,7 @@ import { useLanguage } from "@/lib/TranslationContext";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import ModeToggle from "@/components/ModeToggle";
 import LawCard from "@/components/LawCard";
+import FilingModal from "@/components/FilingModal";
 import { useMode } from "@/lib/useMode";
 import type { QueryResponse, JudgmentCard, OutcomeAnalysisResponse } from "@/lib/api";
 import { getSimilarCases, getOutcomeAnalysis } from "@/lib/api";
@@ -35,24 +36,47 @@ export default function ResultsPage() {
   const [outcomeData, setOutcomeData] = useState<OutcomeAnalysisResponse | null>(null);
   const [outcomeLoading, setOutcomeLoading] = useState(false);
 
+  // Law card expansion state
+  const [expandedLawId, setExpandedLawId] = useState<string | null>(null);
+
+  // Active filing portal act code state
+  const [activeFilingActCode, setActiveFilingActCode] = useState<string | null>(null);
+
+  const [notFound, setNotFound] = useState(false);
+
   useEffect(() => {
-    const stored = sessionStorage.getItem("lexindia-results");
-    const storedQuery = sessionStorage.getItem("lexindia-query");
+    // Try sessionStorage first (set on fresh query), then fall back to
+    // localStorage (persists across soft/hard refreshes in the same browser).
+    const stored =
+      sessionStorage.getItem("lexindia-results") ||
+      localStorage.getItem("lexindia-results");
+    const storedQuery =
+      sessionStorage.getItem("lexindia-query") ||
+      localStorage.getItem("lexindia-query");
 
     if (stored) {
       try {
-        setResults(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        setResults(parsed);
+        // Keep both stores in sync
+        sessionStorage.setItem("lexindia-results", stored);
+        localStorage.setItem("lexindia-results", stored);
       } catch {
-        router.push("/");
+        setNotFound(true);
       }
     } else {
-      router.push("/");
+      // No results available — show a helpful message rather than
+      // redirecting immediately, giving the user a chance to click
+      // "New Search" themselves.
+      setNotFound(true);
     }
 
     if (storedQuery) {
       setQuery(storedQuery);
+      sessionStorage.setItem("lexindia-query", storedQuery);
+      localStorage.setItem("lexindia-query", storedQuery);
     }
-  }, [router]);
+  }, []);
 
   // Fetch similar cases and outcome analysis when query is loaded
   useEffect(() => {
@@ -91,6 +115,29 @@ export default function ResultsPage() {
 
     fetchSimilar();
   }, [query, mode, t]);
+
+  if (notFound) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-6 px-6">
+        <div className="text-5xl">🔍</div>
+        <div className="text-center">
+          <h2 className="text-xl font-display font-semibold text-surface-100 mb-2">
+            No results to display
+          </h2>
+          <p className="text-surface-400 text-sm max-w-sm">
+            Your search results are no longer available. Please start a new search.
+          </p>
+        </div>
+        <button
+          onClick={() => router.push("/")}
+          className="btn-primary"
+          id="start-new-search"
+        >
+          Start New Search
+        </button>
+      </div>
+    );
+  }
 
   if (!results) {
     return (
@@ -204,7 +251,7 @@ export default function ResultsPage() {
                   <span className="text-surface-400 text-sm">{t("analysingOutcomes")}</span>
                 </div>
               </div>
-            ) : outcomeData ? (
+            ) : outcomeData && (outcomeData.petitioner_wins > 0 || outcomeData.respondent_wins > 0 || outcomeData.partial > 0) ? (
               <div className="glass-card p-6 border-l-4 border-l-saffron-500">
                 {/* Favour Label */}
                 <p className="text-lg font-display font-semibold text-surface-50 mb-4">
@@ -303,6 +350,14 @@ export default function ResultsPage() {
                   </div>
                 </div>
               </div>
+            ) : outcomeData ? (
+              /* All outcomes unclear — show a simple info message */
+              <div className="glass-card p-6 border-l-4 border-l-surface-600">
+                <p className="text-surface-400 text-sm flex items-center gap-2">
+                  <span>📊</span>
+                  <span>Outcome data is limited for this query — {outcomeData.total_cases} similar {outcomeData.total_cases === 1 ? "case" : "cases"} found but outcomes could not be determined from available judgment text.</span>
+                </p>
+              </div>
             ) : null}
           </div>
         )}
@@ -315,7 +370,16 @@ export default function ResultsPage() {
             </h2>
             <div className="space-y-4">
               {results.laws.map((law, index) => (
-                <LawCard key={law.section_id} law={law} index={index} />
+                <LawCard
+                  key={law.section_id}
+                  law={law}
+                  index={index}
+                  isExpanded={expandedLawId === law.section_id}
+                  onToggleExpand={() =>
+                    setExpandedLawId(expandedLawId === law.section_id ? null : law.section_id)
+                  }
+                  onFileCase={(actCode) => setActiveFilingActCode(actCode)}
+                />
               ))}
             </div>
           </div>
@@ -409,6 +473,13 @@ export default function ResultsPage() {
           {t("footerText")}
         </p>
       </footer>
+
+      {/* Filing Modal */}
+      <FilingModal
+        actCode={activeFilingActCode || ""}
+        isOpen={activeFilingActCode !== null}
+        onClose={() => setActiveFilingActCode(null)}
+      />
     </div>
   );
 }

@@ -3,7 +3,7 @@ import json
 
 url = "http://127.0.0.1:8000/api/query"
 payload = {
-    "issue": "I want to know about gender equality law in India.",
+    "issue": "I want to file a case about copyright infringement of my software source code in court.",
     "language": "en"
 }
 headers = {

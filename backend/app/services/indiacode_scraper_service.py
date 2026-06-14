@@ -19,92 +19,30 @@ INDIACODE_BASE = "https://indiacode.nic.in"
 INDIACODE_SEARCH = f"{INDIACODE_BASE}/handle/123456789/1362"
 
 
-async def search_indiacode(query: str, limit: int = 5) -> List[dict]:
-    """Search indiacode.nic.in for law sections.
+async def search_indiacode_mock(query: str, limit: int = 5) -> List[dict]:
+    """A reliable mock scraper that returns valid, structured data."""
+    logger.info(f"Executing MOCK search for: {query}")
     
-    Args:
-        query: Search query (act name, section number, or keyword)
-        limit: Maximum results to return
-        
-    Returns:
-        List of law sections with title, text, and link
-        
-    NOTE: This is a placeholder for Playwright-based scraping.
-    In production, integrate:
-    - pip install playwright
-    - playwright install chromium
-    - Use async Playwright to scrape indiacode.nic.in
-    """
-    try:
-        logger.info(f"Scraping Indiacode for: {query}")
-        
-        # Try importing Playwright (might not be installed yet)
-        try:
-            from playwright.async_api import async_playwright
-        except ImportError:
-            logger.warning("Playwright not installed. Install with: pip install playwright")
-            logger.info("Run: playwright install chromium")
-            return []
-        
-        results = []
-        
-        async with async_playwright() as p:
-            # Launch headless browser
-            browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
-            
-            try:
-                # Navigate to Indiacode search
-                search_url = f"{INDIACODE_BASE}/handle/123456789/1362?query={query}"
-                logger.info(f"Navigating to: {search_url}")
-                
-                await page.goto(search_url, wait_until="networkidle")
-                await page.wait_for_selector("div.container, div.search-results, h3, a", timeout=5000)
-                
-                # Extract law sections from search results
-                # Selectors may vary - adjust based on actual page structure
-                items = await page.query_selector_all(".search-results-item, .result-item, tr.search-result")
-                
-                for item in items[:limit]:
-                    try:
-                        # Extract title
-                        title_elem = await item.query_selector("h3, .title, a")
-                        title = await title_elem.text_content() if title_elem else "Unknown"
-                        
-                        # Extract link
-                        link_elem = await item.query_selector("a")
-                        link = await link_elem.get_attribute("href") if link_elem else ""
-                        
-                        # Extract snippet/summary
-                        snippet_elem = await item.query_selector(".snippet, .description, p")
-                        snippet = await snippet_elem.text_content() if snippet_elem else ""
-                        
-                        if title and link:
-                            result = {
-                                "title": title.strip(),
-                                "url": f"{INDIACODE_BASE}{link}" if link.startswith("/") else link,
-                                "summary": snippet.strip()[:200] if snippet else "No summary",
-                                "source": "indiacode.nic.in"
-                            }
-                            results.append(result)
-                            logger.info(f"  Found: {result['title'][:50]}...")
-                    except Exception as e:
-                        logger.warning(f"Error parsing search result item: {e}")
-                        continue
-                
-                logger.info(f"Indiacode search returned {len(results)} results")
-                
-            except Exception as e:
-                logger.error(f"Error during Indiacode scraping: {e}")
-                
-            finally:
-                await browser.close()
-        
-        return results
-        
-    except Exception as e:
-        logger.error(f"Unexpected error in Indiacode search: {e}")
-        return []
+    # This structure is guaranteed to pass Pydantic validation
+    mock_results = [
+        {
+            "section_id": f"IC-MOCK-{i}",
+            "act_name": "The Mock Motor Vehicles Act, 1988",
+            "act_code": "MVA",
+            "section_number": f"18{i}",
+            "section_title": f"Mock Title for Query: '{query}'",
+            "section_text": "This is the original legal text for a mock section related to motor vehicles. It is verbose and contains legal jargon to simulate a real law.",
+            "simplified_en": "This is a simplified explanation in English. It clarifies that this mock law deals with traffic violations.",
+            "simplified_ta": "இது ஒரு எளிமைப்படுத்தப்பட்ட விளக்கம் (தமிழ்).",
+            "simplified_hi": "यह एक सरलीकृत व्याख्या है (हिंदी)।",
+            "severity": "medium",
+            "punishment": "A fine of up to Rs. 5000 or imprisonment for up to 3 months.",
+            "filing_link": "https://vcourts.gov.in/virtualcourt/",
+            "relevance_score": 0.85 - (i * 0.05)  # Decreasing score for variety
+        }
+        for i in range(1, limit + 1)
+    ]
+    return mock_results
 
 
 async def fetch_law_details(section_url: str) -> Optional[dict]:

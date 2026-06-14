@@ -35,9 +35,13 @@ export default function HomePage() {
     try {
       const result: QueryResponse = await queryLaws(query, langCode, mode);
 
-      // Store result in sessionStorage for the results page
-      sessionStorage.setItem("lexindia-results", JSON.stringify(result));
+      // Persist to both sessionStorage (current tab) and localStorage
+      // (survives hard refresh) so the /results page can always recover them.
+      const serialised = JSON.stringify(result);
+      sessionStorage.setItem("lexindia-results", serialised);
       sessionStorage.setItem("lexindia-query", query);
+      localStorage.setItem("lexindia-results", serialised);
+      localStorage.setItem("lexindia-query", query);
       router.push("/results");
     } catch (err: unknown) {
       console.error("Query failed:", err);

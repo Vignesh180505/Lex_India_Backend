@@ -10,6 +10,7 @@ CRITICAL RULES:
   - Must run BEFORE setup/build_index.py creates the IVFFlat index
 
 The model (all-MiniLM-L6-v2) is the same model used by embed_service.py at query time.
+Uses FastEmbed (ONNX Runtime) instead of PyTorch for lower memory usage.
 
 Usage:
     python -m setup.generate_embeddings
@@ -24,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 import numpy as np
 from sqlalchemy import text
 
@@ -57,10 +58,13 @@ async def run_embedding_generation() -> None:
     """Generate embeddings for all sections with simplified_en but no embedding."""
     start_time = time.time()
 
-    # Load the model once
-    logger.info(f"Loading embedding model: {settings.EMBEDDING_MODEL}")
-    model = SentenceTransformer(settings.EMBEDDING_MODEL)
-    dimension = model.get_sentence_embedding_dimension()
+    # Load the model once via FastEmbed (ONNX Runtime)
+    model_name = settings.EMBEDDING_MODEL
+    logger.info(f"Loading embedding model via FastEmbed (ONNX): {model_name}")
+    model = TextEmbedding(model_name=model_name)
+    # Verify dimension with a test embed
+    test_vec = list(model.embed(["test"]))[0]
+    dimension = len(test_vec)
     logger.info(f"Model loaded. Output dimension: {dimension}")
 
     if dimension != settings.EMBEDDING_DIMENSION:
@@ -124,8 +128,8 @@ async def run_embedding_generation() -> None:
                 continue
 
             try:
-                # Batch encode — much faster than one-at-a-time
-                vectors = model.encode(texts, normalize_embeddings=True, batch_size=BATCH_SIZE)
+                # Batch encode via FastEmbed — returns a generator of numpy arrays
+                vectors = list(model.embed(texts, batch_size=BATCH_SIZE))
 
                 # Update each row with its embedding
                 for row_id, section_id, vector in zip(ids, section_ids, vectors):

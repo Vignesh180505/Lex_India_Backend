@@ -2,8 +2,13 @@
 
 Caches complete query responses with a 24-hour TTL (configurable).
 Cache key is the MD5 hash of the lowered+stripped English query text.
+
+Resilience: if Redis is unavailable the cache is transparently skipped.
+The connection is re-attempted on every request so the cache automatically
+re-enables itself if Redis recovers — no restart required.
 """
 
+import asyncio
 import json
 import hashlib
 import logging
@@ -19,16 +24,44 @@ logger = logging.getLogger("lexindia.services.cache")
 _redis: aioredis.Redis | None = None
 
 
-async def get_redis() -> aioredis.Redis:
-    """Get the Redis connection (singleton, lazy-initialized)."""
+async def get_redis() -> aioredis.Redis | None:
+    """Get (or lazily create) the Redis connection.
+
+    Re-attempts the connection on every call when _redis is None so the
+    cache automatically re-enables itself if Redis recovers after a
+    transient failure — without requiring an application restart.
+    """
     global _redis
-    if _redis is None:
-        _redis = aioredis.from_url(
+
+    # Fast path: already connected and healthy
+    if _redis is not None:
+        try:
+            await _redis.ping()
+            return _redis
+        except Exception:
+            # Connection went stale — reset and fall through to reconnect
+            logger.warning("Redis connection lost, will attempt reconnect.")
+            try:
+                await _redis.aclose()
+            except Exception:
+                pass
+            _redis = None
+
+    # Attempt (re-)connection with a short timeout to avoid blocking requests
+    try:
+        candidate = aioredis.from_url(
             settings.REDIS_URL,
             encoding="utf-8",
             decode_responses=True,
+            socket_connect_timeout=1,
         )
+        await asyncio.wait_for(candidate.ping(), timeout=1.0)
+        _redis = candidate
         logger.info("Redis connection established")
+    except Exception as e:
+        logger.warning(f"Redis unavailable: {e}. Caching is disabled for this request.")
+        _redis = None
+
     return _redis
 
 
@@ -54,8 +87,11 @@ async def get(cache_key: str) -> Optional[dict]:
     Returns:
         Cached response dict, or None if not found / expired.
     """
+    r = await get_redis()
+    if not r:
+        return None  # Redis is unavailable
+
     try:
-        r = await get_redis()
         cached = await r.get(cache_key)
         if cached:
             logger.info(f"Cache HIT: {cache_key}")
@@ -81,8 +117,11 @@ async def set(cache_key: str, data: dict, ttl: Optional[int] = None) -> bool:
     if ttl is None:
         ttl = settings.CACHE_TTL_SECONDS
 
+    r = await get_redis()
+    if not r:
+        return False  # Redis is unavailable
+
     try:
-        r = await get_redis()
         serialized = json.dumps(data, ensure_ascii=False, default=str)
         await r.setex(cache_key, ttl, serialized)
         logger.info(f"Cache SET: {cache_key} (TTL={ttl}s)")
@@ -94,8 +133,10 @@ async def set(cache_key: str, data: dict, ttl: Optional[int] = None) -> bool:
 
 async def invalidate(cache_key: str) -> bool:
     """Remove a specific key from cache."""
+    r = await get_redis()
+    if not r:
+        return False
     try:
-        r = await get_redis()
         await r.delete(cache_key)
         logger.info(f"Cache INVALIDATED: {cache_key}")
         return True
@@ -136,8 +177,10 @@ async def clear_all() -> int:
     Returns:
         Number of keys deleted
     """
+    r = await get_redis()
+    if not r:
+        return 0
     try:
-        r = await get_redis()
         keys = await r.keys("lexindia:*")
         if keys:
             deleted = await r.delete(*keys)

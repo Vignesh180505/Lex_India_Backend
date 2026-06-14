@@ -10,6 +10,7 @@ import { useLanguage } from "@/lib/TranslationContext";
 
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import LawCard from "@/components/LawCard";
+import FilingModal from "@/components/FilingModal";
 import { browseLaws, type LawListResponse } from "@/lib/api";
 
 const ACTS = [
@@ -33,6 +34,8 @@ export default function BrowsePage() {
   const [data, setData] = useState<LawListResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedLawId, setExpandedLawId] = useState<string | null>(null);
+  const [activeFilingActCode, setActiveFilingActCode] = useState<string | null>(null);
 
   const fetchLaws = useCallback(async () => {
     setIsLoading(true);
@@ -58,10 +61,15 @@ export default function BrowsePage() {
     fetchLaws();
   }, [fetchLaws]);
 
-  // Reset page when filter changes
+  // Reset page and expanded state when filter changes
   useEffect(() => {
     setPage(1);
+    setExpandedLawId(null);
   }, [selectedAct, search]);
+
+  useEffect(() => {
+    setExpandedLawId(null);
+  }, [page]);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -174,7 +182,16 @@ export default function BrowsePage() {
 
             <div className="space-y-4">
               {data.laws.map((law: any, i: number) => (
-                <LawCard key={law.section_id} law={law} index={i} />
+                <LawCard
+                  key={law.section_id}
+                  law={law}
+                  index={i}
+                  isExpanded={expandedLawId === law.section_id}
+                  onToggleExpand={() =>
+                    setExpandedLawId(expandedLawId === law.section_id ? null : law.section_id)
+                  }
+                  onFileCase={(actCode) => setActiveFilingActCode(actCode)}
+                />
               ))}
             </div>
 
@@ -219,6 +236,13 @@ export default function BrowsePage() {
           {t("footerText")}
         </p>
       </footer>
+
+      {/* Filing Modal */}
+      <FilingModal
+        actCode={activeFilingActCode || ""}
+        isOpen={activeFilingActCode !== null}
+        onClose={() => setActiveFilingActCode(null)}
+      />
     </div>
   );
 }
