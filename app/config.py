@@ -39,7 +39,7 @@ class Settings(BaseSettings):
 
     # ── Application ──────────────────────────────────────────────────────
     SECRET_KEY: str = "change-me-in-production"
-    ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:3001,https://lexindia.vercel.app"
+    ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:3001,https://lexindia.vercel.app,https://lexindiafrontend.vercel.app"
     ENVIRONMENT: str = "development"
     LOG_LEVEL: str = "INFO"
 
