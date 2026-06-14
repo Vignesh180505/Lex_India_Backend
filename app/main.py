@@ -72,7 +72,7 @@ async def log_requests(request: Request, call_next):
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}")
-    return JSONResponse(status_code=500, content={"error": "Internal server error"})
+    return JSONResponse(status_code=500, content={"error": "Internal server error", "details": str(exc)})
 
 
 @app.get("/")
