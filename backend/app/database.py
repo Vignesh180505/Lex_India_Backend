@@ -17,6 +17,8 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
 
+from uuid import uuid4
+
 # ── Async Engine ──────────────────────────────────────────────────────────
 # pool_pre_ping=True ensures stale connections are recycled automatically.
 # echo=True in development for SQL logging; disabled in production.
@@ -26,7 +28,11 @@ engine = create_async_engine(
     pool_pre_ping=True,
     pool_size=20,
     max_overflow=10,
-    connect_args={"ssl": "require"},
+    connect_args={
+        "ssl": "require",
+        "prepared_statement_name_func": lambda: f"__asyncpg_{uuid4()}__",
+        "prepared_statement_cache_size": 0,
+    },
 )
 
 # ── Session Factory ───────────────────────────────────────────────────────

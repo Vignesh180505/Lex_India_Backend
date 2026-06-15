@@ -6,7 +6,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api",
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "https://lex-india-backend.onrender.com/api",
   timeout: 90000,
   headers: {
     "Content-Type": "application/json",

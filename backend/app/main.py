@@ -71,8 +71,15 @@ async def log_requests(request: Request, call_next):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    import urllib.parse
+    db_url = settings.DATABASE_URL
+    try:
+        parsed = urllib.parse.urlparse(db_url)
+        redacted_db = f"{parsed.scheme}://{parsed.username}:***@{parsed.hostname}:{parsed.port}{parsed.path}"
+    except Exception:
+        redacted_db = "unknown"
     logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}")
-    return JSONResponse(status_code=500, content={"error": "Internal server error"})
+    return JSONResponse(status_code=500, content={"error": "Internal server error", "details": str(exc), "db": redacted_db})
 
 
 @app.get("/")
